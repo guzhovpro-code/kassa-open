@@ -11,10 +11,10 @@
 {
   "month": "2026-10",
   "rows": [
-    {"date": "2026-10-03", "type": "income", "amount": "1500.00", "currency": "USD", "method": "Bybit",
+    {"date": "2026-10-03", "type": "income", "amount": "1500.00", "currency": "USD", "method": "Биржа OKX",
      "category": "доход", "note": "текст", "usd": "1500.00", "rate": 0.029},
     {"date": "2026-10-04", "type": "expense", "amount": "120", "currency": "TRY", "method": "Наличные", ...},
-    {"date": "2026-10-05", "type": "transfer", "amount": "300", "currency": "USD", "method": "Bybit",
+    {"date": "2026-10-05", "type": "transfer", "amount": "300", "currency": "USD", "method": "Биржа OKX",
      "to_method": "Наличные"}
   ],
   "rates": {"TRY": 0.029},                 // необязательно: курс (долларов за 1 единицу валюты) для строк без usd
