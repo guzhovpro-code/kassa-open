@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<title>Касса</title>
+<link rel="stylesheet" href="app.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Касса</h1>
+    <span id="badge-test" class="badge" hidden>ТЕСТ</span>
+  </header>
+  <p id="stub" class="note" hidden></p>
+
+  <nav id="tabs" class="seg tabs" hidden>
+    <button type="button" data-tab="record" class="on">Запись</button>
+    <button type="button" data-tab="inbox">Входящие<span id="inbox-count"></span></button>
+    <button type="button" data-tab="today">Сегодня</button>
+    <button type="button" data-tab="month">Месяц</button>
+    <button type="button" data-tab="recent">Последние</button>
+    <button type="button" data-tab="exchanges">Обмены</button>
+  </nav>
+
+  <form id="form" hidden autocomplete="off" novalidate>
+    <p id="draft-banner" class="hint" hidden>Черновик из чата. Проверьте значения и нажмите «Записать»: без этого ничего не запишется.</p>
+    <div id="ok" class="okbox" hidden><span id="ok-text"></span> <button type="button" id="undo" class="mini" hidden>↩ Отменить</button></div>
+    <p id="err" class="err" hidden></p>
+    <p id="warn" class="warn" hidden></p>
+
+    <div id="direction" class="seg">
+      <button type="button" data-dir="out" class="on">Расход</button>
+      <button type="button" data-dir="in">Поступление</button>
+      <button type="button" data-dir="ex">Обмен</button>
+    </div>
+    <div id="rec-fields">
+    <button type="button" id="dictate" class="mini">🎙 Надиктовать</button>
+    <p id="dictate-msg" class="hint" hidden></p>
+
+    <label for="amount">Сумма</label>
+    <input id="amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0" maxlength="20">
+
+    <label>Валюта</label>
+    <div id="cur" class="chips"></div>
+    <div id="cur-panel" class="panel" hidden>
+      <div id="cur-recent-block" hidden>
+        <div class="hint">Недавние</div>
+        <div id="cur-recent" class="chips"></div>
+      </div>
+      <input id="cur-search" type="text" maxlength="40" autocomplete="off" autocapitalize="off"
+             placeholder="Код или название: лира, доллар, тенге">
+      <div id="cur-results" class="results" role="listbox"></div>
+    </div>
+
+    <label for="note">На что</label>
+    <input id="note" type="text" maxlength="200" placeholder="например: продукты, такси, оплата ЖКХ" autocomplete="off">
+    <div class="catline"><span>Категория:</span>
+      <select id="cat-select" aria-label="Категория"></select>
+    </div>
+    <input id="cat-other" type="text" maxlength="40" placeholder="Название категории" hidden>
+
+    <label id="date-label">Дата</label>
+    <div id="date" class="chips"></div>
+    <input id="date-pick" type="date" hidden>
+    <p id="date-hint" class="hint need" hidden></p>
+
+    <label id="method-label">Способ</label>
+    <div id="method" class="chips"></div>
+    <p id="method-hint" class="hint need" hidden>Выберите способ: без него «Записать» не активна.</p>
+    <div id="method-panel" class="panel" hidden>
+      <select id="method-select" aria-label="Способ"></select>
+      <input id="method-other" type="text" maxlength="30" placeholder="Название способа" hidden>
+    </div>
+
+    <div id="segment-block" hidden>
+      <label id="segment-label">Сегмент</label>
+      <div id="segment" class="chips"></div>
+    </div>
+    </div>
+
+    <div id="xform" hidden>
+      <p id="x-banner" class="hint" hidden></p>
+      <label for="x-give-amount">Отдал</label>
+      <div class="xrow">
+        <input id="x-give-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0" maxlength="20">
+        <select id="x-give-cur" aria-label="Валюта отдачи"></select>
+      </div>
+      <select id="x-give-method" aria-label="Способ отдачи"></select>
+
+      <label>Получил</label>
+      <div id="x-legs"></div>
+      <button type="button" id="x-add-leg" class="mini">＋ Ещё валюта</button>
+      <p id="x-rate" class="hint"></p>
+
+      <label for="x-fee-amount">Комиссия (необязательно)</label>
+      <div class="xrow">
+        <input id="x-fee-amount" type="text" inputmode="decimal" autocomplete="off" placeholder="0" maxlength="20">
+        <select id="x-fee-cur" aria-label="Валюта комиссии"></select>
+      </div>
+      <p id="x-fee-hint" class="hint need" hidden>Для комиссии выберите способ отдачи: расход без способа не записывается.</p>
+
+      <label for="x-note">Заметка</label>
+      <input id="x-note" type="text" maxlength="200" placeholder="например: обменник у знакомого" autocomplete="off">
+
+      <label id="x-date-label">Дата</label>
+      <div id="x-date" class="chips"></div>
+      <input id="x-date-pick" type="date" hidden>
+      <p id="x-date-hint" class="hint need" hidden></p>
+    </div>
+  </form>
+
+  <section id="view-inbox" class="view" hidden>
+    <p id="inbox-msg" class="okbox" hidden></p>
+    <p class="hint">Здесь то, что пришло из чата. Само ничего не записывается: запись только по вашему «Записать».</p>
+    <div id="inbox-bybit"></div>
+    <ul id="inbox-list" class="list"></ul>
+  </section>
+
+  <section id="view-today" class="view" hidden>
+    <p id="today-msg" class="okbox" hidden></p>
+    <h2 id="today-title">Сегодня</h2>
+    <div id="today-totals"></div>
+    <div id="today-usd" class="usd"></div>
+    <p id="today-ex" class="hint" hidden></p>
+    <section id="today-chart" hidden>
+      <h3>Расходы по категориям, ≈ USD</h3>
+      <div id="today-bars" class="bars"></div>
+    </section>
+    <p class="hint">Нажмите на запись, чтобы изменить или удалить.</p>
+    <ul id="today-list" class="list"></ul>
+  </section>
+
+  <section id="view-month" class="view" hidden>
+    <div class="monthbar">
+      <button type="button" id="month-prev" class="mini" aria-label="Предыдущий месяц">◀</button>
+      <h2 id="month-title">Месяц</h2>
+      <button type="button" id="month-next" class="mini" aria-label="Следующий месяц">▶</button>
+    </div>
+    <div id="month-usd" class="sumcard"></div>
+    <p id="month-ex" class="hint" hidden></p>
+    <p id="month-closed" class="hint" hidden><span id="month-closed-text"></span>
+      <button type="button" id="month-rates-toggle" class="mini" hidden aria-expanded="false">Курсы ▾</button></p>
+    <p id="month-rates" class="hint" hidden></p>
+    <section id="month-trend-box" hidden>
+      <h3>Динамика по месяцам, ≈ USD</h3>
+      <div id="month-trend" class="trend"></div>
+      <p id="month-trend-hint" class="hint legend"></p>
+    </section>
+    <section id="month-cats-chart">
+      <h3>Расходы по категориям, ≈ USD</h3>
+      <div id="month-cats-bars" class="bars"></div>
+    </section>
+    <section id="month-methods-chart">
+      <h3>Поступления по способам, ≈ USD</h3>
+      <div id="month-methods-bars" class="bars"></div>
+    </section>
+    <section id="month-segments-chart" hidden>
+      <h3>Поступления по сегментам, ≈ USD</h3>
+      <div id="month-segments-bars" class="bars"></div>
+    </section>
+    <section id="month-cur-box" class="curbox">
+      <button type="button" id="month-cur-toggle" class="mini" aria-expanded="false">По валютам ▾</button>
+      <div id="month-totals" hidden></div>
+    </section>
+  </section>
+
+  <section id="view-recent" class="view" hidden>
+    <p id="recent-msg" class="okbox" hidden></p>
+    <p class="hint">Нажмите на запись, чтобы изменить или удалить.</p>
+    <div id="recent-filter" class="chips"></div>
+    <ul id="recent-list" class="list"></ul>
+  </section>
+
+  <section id="view-exchanges" class="view" hidden>
+    <p id="exchanges-msg" class="okbox" hidden></p>
+    <div class="monthbar">
+      <button type="button" id="ex-prev" class="mini" aria-label="Предыдущий месяц">◀</button>
+      <h2 id="ex-title">Обмены</h2>
+      <button type="button" id="ex-next" class="mini" aria-label="Следующий месяц">▶</button>
+    </div>
+    <p class="hint">Нажмите на обмен, чтобы изменить или удалить. Курс считается как отдано за единицу полученного; «≈» - оценка, когда доли не указаны.</p>
+    <ul id="exchanges-list" class="list"></ul>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

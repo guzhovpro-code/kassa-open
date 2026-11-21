@@ -1,0 +1,47 @@
+# Касса: бэкенд мини-приложения (api) и Telegram-бот (bot), один образ, два процесса.
+# Запуск: cp .env.example .env, заполнить .env, затем docker compose up -d --build (подробнее в README.md).
+name: kassa
+x-common: &common
+  build: {context: ./app}
+  image: kassa:latest
+  restart: unless-stopped
+  env_file: [.env]
+  # пользователь контейнера = владелец папки ./data на хосте (KASSA_UID/KASSA_GID из .env, по умолчанию 10001)
+  user: "${KASSA_UID:-10001}:${KASSA_GID:-10001}"
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  volumes:
+    - ./data:/data              # база kassa.db, кэш курсов, кэш модели голоса
+
+services:
+  api:
+    <<: *common
+    container_name: kassa-api
+    environment:
+      KASSA_DB_PATH: /data/kassa.db
+      KASSA_ALLOW_PROD_DB: "1"  # открывает боевую базу kassa.db (файлы *-test.db нужны только тестам)
+    ports:
+      - "127.0.0.1:8080:8080"   # публичный порт мини-приложения: только на localhost, наружу его выводит прокси или туннель
+      # порт 8081 (внутренний API для бота) наружу не публикуется: доступен только по сети compose
+    mem_limit: 256m
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,urllib.request; t=os.environ.get('KASSA_PATH_TOKEN',''); urllib.request.urlopen('http://127.0.0.1:8080/%shealthz' % (t+'/' if t else ''), timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  bot:
+    <<: *common
+    container_name: kassa-bot
+    command: ["python", "-m", "kassa_api.bot"]
+    depends_on:
+      api: {condition: service_healthy}
+    environment:
+      KASSA_INTERNAL_URL: http://api:8081
+      HF_HOME: /data/whisper/hf
+    mem_limit: 1536m            # модель голоса small занимает около 1 ГБ; для tiny/base хватит 512m
+    pids_limit: 256
