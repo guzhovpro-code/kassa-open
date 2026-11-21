@@ -191,6 +191,8 @@ class PublicHandler(_Base):
             return self._report()
         if rest == "api/recent":
             return self._recent()
+        if rest == "api/records":
+            return self._records_range()
         if rest == "api/draft":
             return self._draft()
         if rest == "api/inbox":
@@ -347,6 +349,20 @@ class PublicHandler(_Base):
             return self._json(422, {"ok": False, "error": "bad_filter"})
         result = self._db_call("recent", lambda c: reports.recent(c, no_method=(flt == "no_method"),
                                                                   closed=(flt == "closed")))
+        if result is not None:
+            self._json(200, result)
+
+    def _records_range(self):
+        if self._authenticate("records") is None:
+            return
+        q = self._query()
+        if q is None:
+            return
+        direction = q.get("direction", "")
+        if direction not in ("", "in", "out"):
+            return self._json(422, {"ok": False, "error": "bad_filter"})
+        result = self._db_call("records", lambda c: reports.records_range(
+            c, q.get("from") or None, db.today_local(), q.get("to") or None, direction or None))
         if result is not None:
             self._json(200, result)
 

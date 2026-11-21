@@ -167,3 +167,6 @@ select {
 .periodbar { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .periodbar input[type="date"] { flex: 1 1 0; min-width: 0; }
 .periodquick { margin-bottom: 8px; }
+.daysep { padding: 12px 0 4px; font-size: 13px; font-weight: 600; color: var(--tg-theme-hint-color, #777); list-style: none; }
+.periodsums { margin-top: 14px; }
+.periodsums > summary { cursor: pointer; font-weight: 600; padding: 6px 0; }

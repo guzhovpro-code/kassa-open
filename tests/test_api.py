@@ -98,7 +98,8 @@ def test_meta_requires_auth(env):
 def test_records_only_under_secret_prefix_and_only_post(env):
     port, path = env
     assert req(port, "POST", "/api/records", body=payload(), init=make_init_data(PRIV))[0] == 404
-    assert req(port, "GET", f"/{TOKEN}/api/records", init=make_init_data(PRIV))[0] == 404
+    # GET api/records - список записей периода (читает, не пишет): без дат 422, не 404
+    assert req(port, "GET", f"/{TOKEN}/api/records", init=make_init_data(PRIV))[0] == 422
     assert req(port, "PUT", f"/{TOKEN}/api/records", body=payload(), init=make_init_data(PRIV))[0] == 404
     assert req(port, "DELETE", f"/{TOKEN}/api/records", init=make_init_data(PRIV))[0] == 404
     assert rows(path) == 0

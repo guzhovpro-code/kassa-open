@@ -289,6 +289,21 @@ def recent(conn: sqlite3.Connection, no_method: bool = False, limit: int = RECEN
             "closed_total": total_closed}
 
 
+def records_range(conn: sqlite3.Connection, key: str | None, today: str, to: str | None = None,
+                  direction: str | None = None) -> dict:
+    """Все записи периода [from; to] (те же даты и отбор, что у report period=range: действующие, не перекрытые закрытием;
+    удалённые скрыты), новые сверху. direction: None | 'in' | 'out'. Строка закрытия месяца помечена closure=True."""
+    first, last = period_bounds("range", key, today, to)
+    out = []
+    for r in _period_rows(conn, first, last):
+        if direction and r["direction"] != direction:
+            continue
+        item = _item(r)
+        item["closure"] = r["source"] == "month-close"
+        out.append(item)
+    return {"ok": True, "from": first, "to": last, "count": len(out), "records": out}
+
+
 def get_item(conn: sqlite3.Connection, rec_id: int) -> dict | None:
     r = conn.execute("SELECT " + ITEM_COLUMNS + " " + ITEM_FROM + " WHERE t.id=?", (rec_id,)).fetchone()
     return _item(r) if r else None

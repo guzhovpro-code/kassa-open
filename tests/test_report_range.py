@@ -111,3 +111,82 @@ def test_http_range_uses_kassa_tz_day(env, monkeypatch):
     assert call(port, "GET", "api/report?period=range&from=2026-10-13&to=2026-10-14")[0] == 200
     s, out = call(port, "GET", "api/report?period=range&from=2026-10-13&to=2026-10-15")
     assert (s, out["error"]) == (422, "bad_period")
+
+
+# --- список записей периода: api/records?from=&to=[&direction=] -----------------------------------------------------
+def test_records_range_count_equals_report_count_and_order(conn):
+    add(conn, "out", 100, day="2026-10-04")
+    add(conn, "out", 200, day="2026-10-05", category="а")
+    add(conn, "in", 400, "USD", day="2026-10-08", usd=400, method="cash", category="доход")
+    add(conn, "out", 800, day="2026-10-08", category="б")
+    add(conn, "out", 900, day="2026-10-08", status="cancelled")           # удалена: не показывается, как в отчёте
+    add(conn, "out", 1600, day="2026-10-11")
+    out = reports.records_range(conn, "2026-10-05", TODAY, "2026-10-10")
+    rep = reports.report(conn, "range", "2026-10-05", TODAY, "2026-10-10")
+    assert out["count"] == rep["count"] == len(out["records"]) == 3
+    assert (out["from"], out["to"]) == ("2026-10-05", "2026-10-10")
+    days = [r["occurred_on"] for r in out["records"]]
+    assert days == sorted(days, reverse=True) == ["2026-10-08", "2026-10-08", "2026-10-05"]
+    assert all(r["status"] == "active" and r["closure"] is False for r in out["records"])
+
+
+def test_records_range_bounds_inclusive_and_direction_filter(conn):
+    add(conn, "out", 100, day="2026-10-04")
+    add(conn, "out", 200, day="2026-10-05")
+    add(conn, "in", 400, day="2026-10-10", method="cash")
+    add(conn, "out", 800, day="2026-10-11")
+    assert reports.records_range(conn, "2026-10-05", TODAY, "2026-10-10")["count"] == 2
+    assert reports.records_range(conn, "2026-10-05", TODAY, "2026-10-05")["count"] == 1
+    only_in = reports.records_range(conn, "2026-10-01", TODAY, TODAY, "in")["records"]
+    assert [r["direction"] for r in only_in] == ["in"]
+    assert len(reports.records_range(conn, "2026-10-01", TODAY, TODAY, "out")["records"]) == 3
+
+
+def _closure(conn, day, cents, closed_by=None, source="month-close", cur="USD", direction="in"):
+    conn.execute(
+        "INSERT INTO transactions(idem_key, direction, amount_cents, currency, usd_cents, category, occurred_on, "
+        "created_at, status, source, via, actor_id, closed_by) VALUES (?,?,?,?,?,?,?,?, 'active', ?, 'import', '1', ?)",
+        ("cl-%s-%s-%s" % (source, day, cents), direction, cents, cur, cents, "income", day, day + "T10:00:00Z", source, closed_by))
+
+
+def test_records_range_closure_rows_marked_and_overlapped_skipped(conn):
+    _closure(conn, "2026-09-27", 99999, closed_by="2026-09", source="manual")
+    _closure(conn, "2026-09-28", 5000)
+    out = reports.records_range(conn, "2026-09-25", TODAY, "2026-10-05")
+    assert out["count"] == 1 and out["records"][0]["closure"] is True
+
+
+@pytest.mark.parametrize("first,last,code", [
+    ("2026-10-10", "2026-10-05", "bad_period"), ("2026-10-01", "2026-10-15", "bad_period"),
+    ("x", "2026-10-05", "bad_period"), (None, "2026-10-05", "bad_period"), ("2026-10-01", None, "bad_period"),
+    ("2025-09-09", "2026-10-14", "period_too_long"),
+])
+def test_records_range_bad_input(conn, first, last, code):
+    with pytest.raises(RecordError) as exc:
+        reports.records_range(conn, first, TODAY, last)
+    assert (exc.value.status, exc.value.code) == (422, code)
+
+
+def test_http_records_range(env):
+    port, path = env
+    ids = [api_add(port, amount="10"), api_add(port, amount="20", direction="in", category="доход", method="cash")]
+    gone = api_add(port, amount="30")
+    assert call(port, "POST", "api/records/%d/cancel" % gone, {})[0] == 200
+    s, rng = call(port, "GET", "api/records?from=%s&to=%s" % (API_TODAY, API_TODAY))
+    s2, rep = call(port, "GET", "api/report?period=range&from=%s&to=%s" % (API_TODAY, API_TODAY))
+    assert (s, s2) == (200, 200) and rng["count"] == rep["count"] == len(rng["records"]) == 2
+    assert sorted(r["id"] for r in rng["records"]) == sorted(ids)
+    s, out = call(port, "GET", "api/records?from=%s&to=%s&direction=in" % (API_TODAY, API_TODAY))
+    assert s == 200 and [r["direction"] for r in out["records"]] == ["in"]
+    assert call(port, "GET", "api/records?from=%s&to=%s&direction=x" % (API_TODAY, API_TODAY))[1]["error"] == "bad_filter"
+    assert call(port, "GET", "api/records?from=%s&to=%s" % (API_TODAY, API_TODAY), auth=False)[0] == 401
+
+
+@pytest.mark.parametrize("query,code", [
+    ("", "bad_period"), ("from=2026-10-01", "bad_period"), ("from=2026-10-09&to=2026-10-01", "bad_period"),
+    ("from=2999-01-01&to=2999-01-02", "bad_period"), ("from=2020-01-01&to=2026-01-01", "period_too_long"),
+])
+def test_http_records_range_bad_input_is_422(env, query, code):
+    port, _ = env
+    s, out = call(port, "GET", "api/records?" + query)
+    assert (s, out["error"]) == (422, code)

@@ -174,13 +174,20 @@
       <label for="period-to">по</label><input id="period-to" type="date">
     </div>
     <div class="chips periodquick">
+      <button type="button" id="period-1" class="chip">Вчера</button>
       <button type="button" id="period-7" class="chip">7 дней</button>
+      <button type="button" id="period-14" class="chip">14 дней</button>
       <button type="button" id="period-30" class="chip">30 дней</button>
     </div>
     <p class="hint">Один день: выберите одну и ту же дату в обоих полях. Период включает обе даты, не больше 400 дней.</p>
     <p id="period-msg" class="bad" hidden></p>
     <div id="period-usd" class="sumcard"></div>
     <p id="period-ex" class="hint" hidden></p>
+    <div id="period-dir" class="chips periodquick"></div>
+    <p id="period-list-msg" class="okbox" hidden></p>
+    <ul id="period-list" class="list"></ul>
+    <details id="period-sums" class="periodsums">
+    <summary>Итоги и диаграммы</summary>
     <section id="period-cats-chart">
       <h3>Расходы по категориям, ≈ USD</h3>
       <div id="period-cats-bars" class="bars"></div>
@@ -197,6 +204,7 @@
       <button type="button" id="period-cur-toggle" class="mini" aria-expanded="false">По валютам ▾</button>
       <div id="period-totals" hidden></div>
     </section>
+    </details>
   </section>
 
   <section id="view-recent" class="view" hidden>

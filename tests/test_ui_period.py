@@ -36,6 +36,7 @@ def test_period_tab_default_is_last_7_days_and_looks_like_month(page, server):
     expect(page.locator("#period-cats-bars")).to_contain_text("кафе")
     expect(page.locator("#period-cats-bars")).not_to_contain_text("старое")
     expect(page.locator("#period-methods-bars")).to_contain_text("Наличные")
+    page.locator("#period-sums > summary").click()                                  # итоги свёрнуты по умолчанию
     page.locator("#period-cur-toggle").click()
     expect(page.locator("#period-totals")).to_contain_text("USD")
 
@@ -72,3 +73,28 @@ def test_period_empty_and_bad_dates(page, server):
     expect(page.locator("#period-msg")).to_contain_text("400")
     set_dates(page, day(3), day(1))                                                            # снова верно
     expect(page.locator("#period-msg")).to_be_hidden()
+
+
+def test_period_list_rows_by_day_filter_quick_buttons_and_edit(page, server):
+    port, path = server
+    seed(path, cents=300, cur="USD", usd=300, day=day(1), category="вчера-кафе")
+    seed(path, direction="in", cents=900, cur="USD", usd=900, day=day(1), method="cash", category="доход")
+    seed(path, cents=100, cur="USD", usd=100, day=day(10), category="давно")
+    open_app(page, port)
+    tab(page, "period")
+    page.wait_for_selector("#period-list .rec")
+    assert page.locator("#period-list .rec").count() == 2 and page.locator("#period-list .daysep").count() == 1
+    expect(page.locator("#period-list")).not_to_contain_text("давно")
+    page.locator("#period-14").click()
+    expect(page.locator("#period-list .rec")).to_have_count(3)
+    page.locator("#period-1").click()                                   # «Вчера»: один день, обе даты равны
+    expect(page.locator("#period-list .rec")).to_have_count(2)
+    assert page.locator("#period-from").input_value() == day(1) == page.locator("#period-to").input_value()
+    page.locator("#period-dir .chip", has_text="Поступления").click()
+    expect(page.locator("#period-list .rec")).to_have_count(1)
+    page.locator("#period-dir .chip", has_text="Все").click()
+    expect(page.locator("#period-list .rec")).to_have_count(2)
+    page.locator("#period-list .rec", has_text="вчера-кафе").click()    # та же правка, что в «Последних»
+    page.locator("#period-list .acts button", has_text="Удалить").click()
+    page.locator("#period-list .acts button", has_text="Да, удалить").click()
+    expect(page.locator("#period-list .rec")).to_have_count(1)

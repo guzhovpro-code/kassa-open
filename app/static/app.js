@@ -47,7 +47,7 @@
     catManual: null, catOther: false, catAuto: null,     // категория: выбрана рукой / «Другая» / определена по тексту
     method: "", methodOther: false, methodBy: { out: "", in: "" }, showMoreMethod: false, syncMethod: false,
     dateKey: "today", datePick: "", showMoreCur: false, pending: [], clientId: null, busy: false, draftId: null,
-    meta: null, catalog: [], lastId: null, month: null, recentFilter: "", lockUntil: 0,
+    meta: null, catalog: [], lastId: null, month: null, recentFilter: "", periodDir: "", lockUntil: 0,
     segment: "",                                    // сегмент поступления в форме: "b2b" | "b2c" | "" (без пометки)
     x: null, exMonth: null, lastKind: ""            // обмен: поля формы, месяц списка «Обмены», что отменяет «↩ Отменить»
   };
@@ -846,6 +846,7 @@
   }
 
   var CTX_TODAY = { msg: "today-msg", reload: function () { loadToday(); } };
+  var CTX_PERIOD = { msg: "period-list-msg", reload: function () { loadPeriod(); } };
   var CTX_RECENT = { msg: "recent-msg", reload: function () { loadRecent(); } };
 
   // --- диаграммы (этап 7): горизонтальные полосы и столбцы по месяцам; только CSS и inline SVG ------------------
@@ -1095,6 +1096,7 @@
       if (res.status === 422) {
         show(msg, true); msg.textContent = ERRORS[res.body.error] || ERRORS.bad_period;
         clear(box); clear($("period-totals")); clear($("period-cats-bars")); clear($("period-methods-bars"));
+        clear($("period-list")); clear($("period-dir"));
         $("period-title").textContent = "Период";
         return;
       }
@@ -1111,7 +1113,34 @@
       show($("period-segments-chart"), segs.length > 0);
       if (segs.length) { monthBars($("period-segments-bars"), segs, "in", "Поступлений нет"); }
       else { clear($("period-segments-bars")); }
+      return loadPeriodList(rep.from, rep.to);
     }).catch(function () { box.textContent = "Нет связи. Попробуйте ещё раз."; });
+  }
+
+  // список записей периода по дням, новые сверху (api/records?from=&to=[&direction=]); строка и правка - как в «Последних»
+  var PERIOD_DIRS = [{ value: "", label: "Все" }, { value: "out", label: "Расходы" }, { value: "in", label: "Поступления" }];
+  function loadPeriodList(from, to) {
+    var list = $("period-list");
+    chips($("period-dir"), PERIOD_DIRS, state.periodDir, function (v) {
+      state.periodDir = v; setMsg("period-list-msg", "", false); loadPeriod();
+    });
+    return api("api/records?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to) +
+               (state.periodDir ? "&direction=" + state.periodDir : "")).then(function (res) {
+      clear(list);
+      if (res.status !== 200) {
+        list.appendChild(el("li", "rec empty", "Не удалось загрузить записи. Попробуйте ещё раз."));
+        return;
+      }
+      if (!res.body.records.length) { list.appendChild(el("li", "rec empty", "За этот период записей нет")); }
+      var day = null;
+      res.body.records.forEach(function (r) {
+        if (r.occurred_on !== day) { day = r.occurred_on; list.appendChild(el("li", "daysep", dayTitle(day))); }
+        list.appendChild(recordRow(r, r.closure ? null : CTX_PERIOD));
+      });
+    }).catch(function () {
+      clear(list);
+      list.appendChild(el("li", "rec empty", "Нет связи. Попробуйте ещё раз."));
+    });
   }
 
   function loadRecent() {
@@ -1759,7 +1788,9 @@
   });
   $("period-from").addEventListener("change", loadPeriod);
   $("period-to").addEventListener("change", loadPeriod);
+  $("period-1").addEventListener("click", function () { var y = addDays(state.meta.today, -1); setPeriod(y, y); });
   $("period-7").addEventListener("click", function () { setPeriod(addDays(state.meta.today, -6), state.meta.today); });
+  $("period-14").addEventListener("click", function () { setPeriod(addDays(state.meta.today, -13), state.meta.today); });
   $("period-30").addEventListener("click", function () { setPeriod(addDays(state.meta.today, -29), state.meta.today); });
   $("period-cur-toggle").addEventListener("click", function () {
     var open = $("period-totals").hidden;
