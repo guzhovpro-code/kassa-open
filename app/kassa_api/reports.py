@@ -1,4 +1,4 @@
-"""Отчёты «Сегодня» и «Месяц» и список «Последние». Только чтение; все цифры считает этот код, не модель.
+"""Отчёты «Сегодня», «Месяц» и «Период» (произвольные даты) и список «Последние». Только чтение; все цифры считает этот код, не модель.
 
 Правила (спецификация, разд. 5 и Т3.1):
 - в отчётах только активные записи (status='active'), дата - occurred_on; записи, перекрытые закрытием месяца
@@ -42,9 +42,33 @@ def _item(r) -> dict:
             "segment": r["segment"], "exchange_id": r["exchange_id"]}
 
 
-def period_bounds(period: str, key: str | None, today: str) -> tuple[str, str]:
-    """('2026-10-01', '2026-10-31') для месяца, (d, d) для дня. Будущее и мусор -> 422 bad_period."""
+MAX_RANGE_DAYS = 400
+
+
+def _past_day(key: str | None, today_d: date_cls) -> date_cls:
+    if not key or not DATE_RE.fullmatch(key):
+        raise RecordError(422, "bad_period")
+    try:
+        d = date_cls.fromisoformat(key)
+    except ValueError:
+        raise RecordError(422, "bad_period") from None
+    if d > today_d or d.year < MIN_YEAR:
+        raise RecordError(422, "bad_period")
+    return d
+
+
+def period_bounds(period: str, key: str | None, today: str, to: str | None = None) -> tuple[str, str]:
+    """('2026-10-01', '2026-10-31') для месяца, (d, d) для дня, (from, to) включительно для period='range'
+    (key = from, to = to; from <= to <= сегодня, не больше MAX_RANGE_DAYS дней: иначе 422 bad_period / period_too_long).
+    Будущее и мусор -> 422 bad_period. «Сегодня» передаёт вызывающий (db.today_local(): день в поясе KASSA_TZ)."""
     today_d = date_cls.fromisoformat(today)
+    if period == "range":
+        first, last = _past_day(key, today_d), _past_day(to, today_d)
+        if first > last:
+            raise RecordError(422, "bad_period")
+        if (last - first).days + 1 > MAX_RANGE_DAYS:
+            raise RecordError(422, "period_too_long")
+        return first.isoformat(), last.isoformat()
     if period == "day":
         key = key or today
         if not DATE_RE.fullmatch(key):
@@ -82,8 +106,10 @@ def _period_rows(conn: sqlite3.Connection, first: str, last: str):
         "ORDER BY t.occurred_on DESC, t.created_at DESC, t.id DESC", (first, last)).fetchall()
 
 
-def report(conn: sqlite3.Connection, period: str, key: str | None, today: str) -> dict:
-    first, last = period_bounds(period, key, today)
+def report(conn: sqlite3.Connection, period: str, key: str | None, today: str, to: str | None = None) -> dict:
+    """period: day | month | range. Для range key = дата начала, to = дата конца (включительно); ответ того же вида,
+    что у month (итоги по валютам, ≈ USD, by_category, by_method, by_segment, count), без пометки о закрытии месяца."""
+    first, last = period_bounds(period, key, today, to)
     rows = _period_rows(conn, first, last)
 
     per_cur = collections.defaultdict(lambda: {"out_cents": 0, "in_cents": 0, "count": 0})
@@ -112,7 +138,7 @@ def report(conn: sqlite3.Connection, period: str, key: str | None, today: str) -
         result["by_category"] = _group(rows, "out", lambda r: r["category"] or "без категории")
         result["by_method"] = _group(rows, "in", lambda r: r["method_title"] or NO_METHOD_TITLE)
         result["by_segment"] = _group(rows, "in", lambda r: SEGMENT_TITLES.get(r["segment"], NO_SEGMENT_TITLE))
-        closed = _closed_info(conn, first[:7], rows)
+        closed = _closed_info(conn, first[:7], rows) if period == "month" else None
         if closed is not None:
             result["closed"] = closed
     return result

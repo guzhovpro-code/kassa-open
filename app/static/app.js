@@ -29,7 +29,8 @@
     draft_closed: "Этот черновик уже закрыт (записан, отменён или устарел). Дубля нет.",
     refused: "Не получилось записать. Внесите вручную.",
     bad_request: "Не получилось. Проверьте поля.",
-    bad_period: "Такого периода нет.",
+    bad_period: "Такого периода нет. Проверьте даты: «с» не позже «по», будущее выбрать нельзя.",
+    period_too_long: "Период не длиннее 400 дней.",
     bad_segment: "Сегмент: B2B или B2C, и только у поступления.",
     bad_payer: "Плательщик: до 30 символов, без служебных знаков.",
     server_error: "Касса не смогла записать. Ничего не записано, попробуйте позже."
@@ -1069,6 +1070,50 @@
     }).catch(function () { box.textContent = "Нет связи. Попробуйте ещё раз."; });
   }
 
+  // --- отчёт за период (api/report?period=range&from=&to=): тот же вид, что «Месяц» ---
+  function addDays(iso, delta) {
+    var d = new Date(iso + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+  function periodTitle(from, to) {
+    return from === to ? dayTitle(from) : dayTitle(from) + " - " + dayTitle(to);
+  }
+  function setPeriod(from, to) {
+    $("period-from").value = from; $("period-to").value = to;
+    loadPeriod();
+  }
+  function loadPeriod() {
+    var box = $("period-usd"), msg = $("period-msg"), today = state.meta.today;
+    if (!$("period-from").value || !$("period-to").value) {
+      var t = today;
+      $("period-to").value = t; $("period-from").value = addDays(t, -6);
+    }
+    var from = $("period-from").value, to = $("period-to").value;
+    $("period-from").max = today; $("period-to").max = today;
+    return api("api/report?period=range&from=" + from + "&to=" + to).then(function (res) {
+      if (res.status === 422) {
+        show(msg, true); msg.textContent = ERRORS[res.body.error] || ERRORS.bad_period;
+        clear(box); clear($("period-totals")); clear($("period-cats-bars")); clear($("period-methods-bars"));
+        $("period-title").textContent = "Период";
+        return;
+      }
+      show(msg, false);
+      if (authFail(res.status, box)) { return; }
+      var rep = res.body;
+      $("period-title").textContent = periodTitle(rep.from, rep.to);
+      renderTotals($("period-totals"), rep);
+      renderMonthSummary(box, rep);
+      setPeriodCount($("period-ex"), rep.exchanges || 0);
+      monthBars($("period-cats-bars"), rep.by_category, "out", "Расходов нет");
+      monthBars($("period-methods-bars"), rep.by_method, "in", "Поступлений нет");
+      var segs = rep.by_segment || [];
+      show($("period-segments-chart"), segs.length > 0);
+      if (segs.length) { monthBars($("period-segments-bars"), segs, "in", "Поступлений нет"); }
+      else { clear($("period-segments-bars")); }
+    }).catch(function () { box.textContent = "Нет связи. Попробуйте ещё раз."; });
+  }
+
   function loadRecent() {
     var list = $("recent-list");
     return api("api/recent" + (state.recentFilter ? "?filter=" + state.recentFilter : "")).then(function (res) {
@@ -1523,6 +1568,7 @@
     show($("view-inbox"), name === "inbox");
     show($("view-today"), name === "today");
     show($("view-month"), name === "month");
+    show($("view-period"), name === "period");
     show($("view-recent"), name === "recent");
     show($("view-exchanges"), name === "exchanges");
     if (tg && tg.MainButton) { if (name === "record") { tg.MainButton.show(); } else { tg.MainButton.hide(); } }
@@ -1531,6 +1577,7 @@
     if (name === "inbox") { setMsg("inbox-msg", "", false); loadInbox(); }
     if (name === "today") { loadToday(); }
     if (name === "month") { loadMonth(); }
+    if (name === "period") { loadPeriod(); }
     if (name === "today") { setMsg("today-msg", "", false); }
     if (name === "recent") { setMsg("recent-msg", "", false); loadRecent(); }
     if (name === "exchanges") { setMsg("exchanges-msg", "", false); loadExchanges(); }
@@ -1710,6 +1757,16 @@
     $("month-cur-toggle").textContent = open ? "По валютам ▴" : "По валютам ▾";
     $("month-cur-toggle").setAttribute("aria-expanded", String(open));
   });
+  $("period-from").addEventListener("change", loadPeriod);
+  $("period-to").addEventListener("change", loadPeriod);
+  $("period-7").addEventListener("click", function () { setPeriod(addDays(state.meta.today, -6), state.meta.today); });
+  $("period-30").addEventListener("click", function () { setPeriod(addDays(state.meta.today, -29), state.meta.today); });
+  $("period-cur-toggle").addEventListener("click", function () {
+    var open = $("period-totals").hidden;
+    show($("period-totals"), open);
+    $("period-cur-toggle").textContent = open ? "По валютам ▴" : "По валютам ▾";
+    $("period-cur-toggle").setAttribute("aria-expanded", String(open));
+  });
   $("month-prev").addEventListener("click", function () { state.month = shiftMonth(state.month, -1); loadMonth(); });
   $("month-next").addEventListener("click", function () {
     var next = shiftMonth(state.month, 1);
@@ -1721,7 +1778,7 @@
     var m = /[?&]draft=([0-9]{1,12})(?:&|$)/.exec(qs);
     loadInbox(true);
     if (m) { return applyDraft(m[1], /[?&]flip=1(?:&|$)/.test(qs)); }
-    var tab = /[?&]tab=(recent|inbox|today|month|exchanges)(?:&|$)/.exec(qs);
+    var tab = /[?&]tab=(recent|inbox|today|month|period|exchanges)(?:&|$)/.exec(qs);
     if (tab) { showTab(tab[1]); }
   });
 })();

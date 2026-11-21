@@ -6,12 +6,14 @@
 
   /start                    приветствие и кнопка «Касса» (web_app на KASSA_PUBLIC_URL), кнопка меню у поля ввода
   «кофе 150 лир»            карточка с кнопками «Верно (или Записать) / Исправить / Отмена (или Это не деньги)»
-  голосовое сообщение       расшифровка локальным faster-whisper (KASSA_VOICE_ENABLED=1, модель KASSA_WHISPER_MODEL),
-                            дальше как текст
+  голосовое сообщение       расшифровка по KASSA_VOICE_PROVIDER: local (faster-whisper на этой машине, модель
+                            KASSA_WHISPER_MODEL), groq (облако Groq, ключ KASSA_GROQ_API_KEY, звук уходит в Groq)
+                            или off (голос выключен); дальше как текст
   «Только карта», «не тратил»   отметка дня (денег не создаёт)
   очередь исходящих         напоминание и правки карточек после записи в форме приходят из бэкенда (outbox)
 
-Только стандартная библиотека; faster-whisper импортируется лениво при первом голосовом сообщении.
+Только стандартная библиотека; faster-whisper импортируется лениво при первом голосовом сообщении и в образ
+может не ставиться вовсе (build-arg INSTALL_WHISPER=0).
 """
 import json
 import os
@@ -36,6 +38,9 @@ DOWN_TEXT = "Касса недоступна, ничего не записано
 REJECTED_TEXT = "Касса не приняла сообщение, ничего не записано."
 STT_FAIL_TEXT = "Не расшифровалось, ничего не записано. Попробуйте ещё раз или напишите текстом."
 VOICE_OFF_TEXT = "Голосовые сообщения выключены. Напишите текстом, например: «кофе 150 лир»."
+VOICE_NO_KEY_TEXT = "Голос через Groq не настроен: нет ключа KASSA_GROQ_API_KEY. Напишите текстом, например: «кофе 150 лир»."
+VOICE_NO_WHISPER_TEXT = ("Расшифровка на этой машине не установлена: образ собран без faster-whisper. "
+                         "Напишите текстом, например: «кофе 150 лир».")
 VOICE_LONG_TEXT = "Голосовое слишком длинное, ничего не записано. Запишите одну трату короче."
 START_TEXT = ("Касса. Пишите траты и поступления как в чате, например: «кофе 150 лир», «получил 100 долларов на карту», "
               "или присылайте голосовое. Я пришлю карточку: «Верно» или «Записать» откроет форму с заполненными полями, «Отмена» и «Это не деньги» ничего не запишут. "
@@ -140,6 +145,64 @@ class Backend:
             raise BackendDown(type(exc).__name__) from None
 
 
+class VoiceUnavailable(Exception):
+    """Расшифровка не настроена или не установлена; текст исключения - ответ человеку (без секретов)."""
+
+
+VOICE_PROVIDERS = ("local", "groq", "off")
+GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+GROQ_DEFAULT_MODEL = "whisper-large-v3-turbo"
+
+
+def voice_provider(env=os.environ) -> str:
+    """local | groq | off. KASSA_VOICE_PROVIDER главнее; без него KASSA_VOICE_ENABLED=0 значит off, иначе local.
+    Незнакомое значение = off (лучше выключить голос, чем молча отправить звук не туда)."""
+    raw = (env.get("KASSA_VOICE_PROVIDER") or "").strip().lower()
+    if not raw:
+        return "off" if (env.get("KASSA_VOICE_ENABLED") or "1").strip() == "0" else "local"
+    return raw if raw in VOICE_PROVIDERS else "off"
+
+
+class GroqTranscriber:
+    """Облачная расшифровка Groq (OpenAI-совместимый /audio/transcriptions). Звук уходит в Groq: решает владелец.
+    Только стандартная библиотека; ключ берётся из KASSA_GROQ_API_KEY и нигде не печатается."""
+
+    def __init__(self, api_key: str, model: str = GROQ_DEFAULT_MODEL, url: str = GROQ_URL, timeout: float = 60,
+                 opener=None):
+        self.api_key, self.model, self.url, self.timeout = (api_key or "").strip(), model or GROQ_DEFAULT_MODEL, url, timeout
+        self._open = opener or urllib.request.urlopen
+
+    def __call__(self, path: str) -> str:
+        if not self.api_key:
+            raise VoiceUnavailable(VOICE_NO_KEY_TEXT)
+        with open(path, "rb") as fh:
+            audio = fh.read()
+        boundary = "kassa" + os.urandom(12).hex()
+        parts = []
+        for name, value in (("model", self.model), ("response_format", "json"), ("temperature", "0")):
+            parts.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (boundary, name, value)).encode())
+        parts.append(("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.ogg\"\r\n"
+                      "Content-Type: audio/ogg\r\n\r\n" % boundary).encode())
+        body = b"".join(parts) + audio + ("\r\n--%s--\r\n" % boundary).encode()
+        req = urllib.request.Request(self.url, data=body, method="POST", headers={
+            "Authorization": "Bearer " + self.api_key, "Content-Type": "multipart/form-data; boundary=" + boundary,
+            "Accept": "application/json", "User-Agent": "kassa-bot/1.0"})
+        with self._open(req, timeout=self.timeout) as resp:
+            data = json.load(resp)
+        return (data.get("text") or "").strip()
+
+
+def make_transcriber(env=os.environ):
+    """(провайдер, расшифровщик или None). Для off расшифровщика нет."""
+    provider = voice_provider(env)
+    if provider == "local":
+        return provider, WhisperTranscriber(env.get("KASSA_WHISPER_MODEL") or "small",
+                                            env.get("KASSA_WHISPER_DIR") or "/data/whisper")
+    if provider == "groq":
+        return provider, GroqTranscriber(env.get("KASSA_GROQ_API_KEY") or "", env.get("KASSA_GROQ_MODEL") or GROQ_DEFAULT_MODEL)
+    return provider, None
+
+
 class WhisperTranscriber:
     """Расшифровка локальным faster-whisper. Модель грузится при первом вызове (скачивается в download_root)."""
 
@@ -151,7 +214,10 @@ class WhisperTranscriber:
     def __call__(self, path: str) -> str:
         with self._lock:
             if self._model is None:
-                from faster_whisper import WhisperModel           # ленивый импорт: тесты идут без него
+                try:
+                    from faster_whisper import WhisperModel       # ленивый импорт: тесты идут без него
+                except ImportError:
+                    raise VoiceUnavailable(VOICE_NO_WHISPER_TEXT) from None
                 self._model = WhisperModel(self.model_name, device="cpu", compute_type="int8",
                                            download_root=self.download_root)
             segments, _info = self._model.transcribe(path, vad_filter=True)       # язык определяется сам
@@ -299,6 +365,8 @@ class Bot:
             with os.fdopen(fd, "wb") as fh:
                 fh.write(data)
             text = (self.transcribe(path) or "").strip()
+        except VoiceUnavailable as exc:
+            return self._say(chat_id, str(exc), mid)
         except Exception as exc:        # noqa: BLE001
             log("kassa-bot: расшифровка не удалась: %s" % type(exc).__name__)
         finally:
@@ -420,11 +488,10 @@ class Bot:
 def main() -> None:
     config = Config.from_env()
     token = os.environ.get("KASSA_BOT_TOKEN", "")
-    voice_enabled = (os.environ.get("KASSA_VOICE_ENABLED") or "1") == "1"
-    transcriber = WhisperTranscriber(os.environ.get("KASSA_WHISPER_MODEL") or "small",
-                                     os.environ.get("KASSA_WHISPER_DIR") or "/data/whisper")
+    provider, transcriber = make_transcriber()
+    voice_enabled = transcriber is not None
     backend = Backend(os.environ.get("KASSA_INTERNAL_URL") or "http://api:8081", config.internal_token)
-    log("kassa-bot started")
+    log("kassa-bot started, voice: %s" % provider)
     Bot(config, Telegram(token), backend, transcriber, voice_enabled).run()
 
 

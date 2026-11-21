@@ -19,22 +19,30 @@ Telegram  <--long polling-->  bot (kassa_api.bot)  --HTTP, Bearer KASSA_INTERNAL
 - `moneytext.py`, `exchangetext.py`, `categorize.py`: разбор фраз («кофе 150 лир», «поменял 100 евро на лиры»)
   словарями и регулярными выражениями, без языковых моделей.
 - `cards.py`: черновики-карточки, очередь исходящих (`outbox`), вечернее напоминание, отметки дня.
-- `records.py`, `exchanges.py`, `reports.py`: запись, правка, отчёты; `rates.py`: курсы к USD (frankfurter и ЦБ РФ,
+- `records.py`, `exchanges.py`, `reports.py`: запись, правка, отчёты (`report(conn, period, key, today, to=None)`:
+  `day`, `month` и `range`; `GET /api/report?period=range&from=YYYY-MM-DD&to=YYYY-MM-DD`, обе даты включительно,
+  не позже сегодняшнего дня в поясе `KASSA_TZ`, не больше 400 дней, формат ответа как у месяца, считает тот же код); `rates.py`: курсы к USD (frankfurter и ЦБ РФ,
   кэш в `data/`, сеть только в фоновом потоке); `db.py`: схема SQLite и миграции.
 
 ## bot (`python -m kassa_api.bot`)
 
-Long polling Telegram. Допущенным пользователям: `/start`, текст (карточка), голос (расшифровка `faster-whisper`,
-затем как текст), отметки дня, нажатия кнопок; чужим - молчание. Сообщения из очереди исходящих (напоминание, правка
+Long polling Telegram. Допущенным пользователям: `/start`, текст (карточка), голос (расшифровка, затем как текст),
+отметки дня, нажатия кнопок; чужим - молчание.
+
+Голос выбирается `KASSA_VOICE_PROVIDER`: `local` (`faster-whisper` на машине, образ с `INSTALL_WHISPER=1`, по
+умолчанию), `groq` (облачная расшифровка Groq по OpenAI-совместимому `/audio/transcriptions`, только стандартная
+библиотека, звук уходит в Groq, ключ `KASSA_GROQ_API_KEY`) или `off`. Расшифровщик - любой вызываемый объект
+`path -> text`; `VoiceUnavailable` превращает настройку «нет ключа» или «нет faster-whisper» в понятный ответ человеку.
+Старое `KASSA_VOICE_ENABLED=0` без провайдера означает `off`. Сообщения из очереди исходящих (напоминание, правка
 карточки после записи в форме) бот отправляет сам. Денежной логики в боте нет.
 
 ## Данные
 
-`./data/kassa.db` (SQLite, WAL), `./data/rates-cache.json` (кэш курсов), `./data/whisper/` (модель голоса).
+`./data/kassa.db` (SQLite, WAL), `./data/rates-cache.json` (кэш курсов), `./data/whisper/` (модель голоса `local`).
 Сумма хранится целыми центами, курс к USD - снимок на момент записи. Схема версионируется (`PRAGMA user_version`),
 миграции идут при старте api.
 
 ## Проверки
 
 `python -m pytest -q` из корня репозитория (нужны `cryptography`, `tzdata`, `pytest`). Тесты браузера
-(`tests/test_ui*.py`) требуют `playwright` и доступ к telegram.org; без них пропускаются.
+(`tests/test_ui*.py`, в том числе вкладка «Период») требуют `playwright` и доступ к telegram.org; без них пропускаются.

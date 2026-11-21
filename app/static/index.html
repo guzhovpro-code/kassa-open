@@ -21,6 +21,7 @@
     <button type="button" data-tab="inbox">Входящие<span id="inbox-count"></span></button>
     <button type="button" data-tab="today">Сегодня</button>
     <button type="button" data-tab="month">Месяц</button>
+    <button type="button" data-tab="period">Период</button>
     <button type="button" data-tab="recent">Последние</button>
     <button type="button" data-tab="exchanges">Обмены</button>
   </nav>
@@ -164,6 +165,38 @@
     <section id="month-cur-box" class="curbox">
       <button type="button" id="month-cur-toggle" class="mini" aria-expanded="false">По валютам ▾</button>
       <div id="month-totals" hidden></div>
+    </section>
+  </section>
+
+  <section id="view-period" class="view" hidden>
+    <h2 id="period-title">Период</h2>
+    <div class="periodbar">
+      <label for="period-from">С</label><input id="period-from" type="date">
+      <label for="period-to">по</label><input id="period-to" type="date">
+    </div>
+    <div class="chips periodquick">
+      <button type="button" id="period-7" class="chip">7 дней</button>
+      <button type="button" id="period-30" class="chip">30 дней</button>
+    </div>
+    <p class="hint">Один день: выберите одну и ту же дату в обоих полях. Период включает обе даты, не больше 400 дней.</p>
+    <p id="period-msg" class="bad" hidden></p>
+    <div id="period-usd" class="sumcard"></div>
+    <p id="period-ex" class="hint" hidden></p>
+    <section id="period-cats-chart">
+      <h3>Расходы по категориям, ≈ USD</h3>
+      <div id="period-cats-bars" class="bars"></div>
+    </section>
+    <section id="period-methods-chart">
+      <h3>Поступления по способам, ≈ USD</h3>
+      <div id="period-methods-bars" class="bars"></div>
+    </section>
+    <section id="period-segments-chart" hidden>
+      <h3>Поступления по сегментам, ≈ USD</h3>
+      <div id="period-segments-bars" class="bars"></div>
+    </section>
+    <section id="period-cur-box" class="curbox">
+      <button type="button" id="period-cur-toggle" class="mini" aria-expanded="false">По валютам ▾</button>
+      <div id="period-totals" hidden></div>
     </section>
   </section>
 

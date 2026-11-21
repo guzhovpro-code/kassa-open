@@ -314,7 +314,7 @@ def test_undo_plate_cancels_just_saved_record(page, server):
 def test_tabs_switch_and_main_button_only_on_record(page, server):
     port, _ = server
     open_app(page, port)
-    assert page.locator("#tabs button").all_inner_texts() == ["Запись", "Входящие", "Сегодня", "Месяц", "Последние", "Обмены"]
+    assert page.locator("#tabs button").all_inner_texts() == ["Запись", "Входящие", "Сегодня", "Месяц", "Период", "Последние", "Обмены"]
     assert page.locator("#form").is_visible() and main_button_visible(page) is True
     tab(page, "today")
     assert shown(page, "#view-today") and not shown(page, "#form")

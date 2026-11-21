@@ -153,7 +153,7 @@ def test_expense_screen_shows_date_and_method_without_expanding(page, server):
     port, _ = server
     open_app(page, port, method=None)
     labels = page.evaluate(VISIBLE_BUTTONS)
-    assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
+    assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Период", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
                       "TRY", "USDT", "USD", "RUB", "Ещё ▾"] + DATE_BUTTONS + \
         ["Наличные", "Redot", "Тинькофф", "Ещё ▾"]
     assert page.locator("#date").is_visible() and page.locator("#method").is_visible()     # ничего не раскрывать
@@ -293,7 +293,7 @@ def test_income_without_method_shows_chips_and_hint(page, server):
     btn(page, "direction", "Поступление").click()
     assert page.locator("#date").is_visible() and page.locator("#method").is_visible()
     labels = page.evaluate(VISIBLE_BUTTONS)
-    assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
+    assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Период", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
                       "TRY", "USDT", "USD", "RUB", "Ещё ▾"] + DATE_BUTTONS + ["Bybit", "Тинькофф", "Сбер", "Ещё ▾"] + ["B2B", "B2C"]
     assert page.locator("#method-hint").is_visible()
 

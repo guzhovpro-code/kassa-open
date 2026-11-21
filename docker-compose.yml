@@ -2,7 +2,11 @@
 # Запуск: cp .env.example .env, заполнить .env, затем docker compose up -d --build (подробнее в README.md).
 name: kassa
 x-common: &common
-  build: {context: ./app}
+  # INSTALL_WHISPER=0 в .env: образ без faster-whisper (голос через groq или выключен), см. README
+  build:
+    context: ./app
+    args:
+      INSTALL_WHISPER: "${INSTALL_WHISPER:-1}"
   image: kassa:latest
   restart: unless-stopped
   env_file: [.env]
@@ -43,5 +47,5 @@ services:
     environment:
       KASSA_INTERNAL_URL: http://api:8081
       HF_HOME: /data/whisper/hf
-    mem_limit: 1536m            # модель голоса small занимает около 1 ГБ; для tiny/base хватит 512m
+    mem_limit: 1536m            # локальная модель small занимает около 1 ГБ; для tiny/base, groq и off хватит 512m
     pids_limit: 256

@@ -328,7 +328,11 @@ class PublicHandler(_Base):
         if period == "trend":
             result = self._db_call("report", lambda c: reports.trend(c, db.today_local()))
         else:
-            result = self._db_call("report", lambda c: reports.report(c, period, key or None, db.today_local()))
+            if period == "range":
+                key, to = q.get("from"), q.get("to")
+            else:
+                to = None
+            result = self._db_call("report", lambda c: reports.report(c, period, key or None, db.today_local(), to or None))
         if result is not None:
             self._json(200, result)
 
