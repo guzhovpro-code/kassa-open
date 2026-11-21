@@ -1,0 +1,4 @@
+# .git-checks: обязательные проверки перед git push (читает _shared/scripts/git-hooks/pre-push).
+# test: команда тестов (в корне репозитория); timeout: секунд на команду; skip: причина, если тестов нет совсем.
+test: python3 -m pytest -q
+timeout: 300
