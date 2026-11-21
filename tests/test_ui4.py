@@ -365,6 +365,7 @@ def test_today_edit_amount_and_currency_with_audit_and_totals(page, server):
     expect(page.locator("#today-msg")).to_contain_text("изменена")
     r = fetch_row(path, rid)
     assert (r["amount_cents"], r["currency"], r["usd_cents"], r["category"]) == (25050, "USD", 25050, "кафе")   # этап 5: USD всегда 1:1
+    expect(page.locator(".card-title", has_text="USD")).to_have_count(1)   # дождаться перерисовки итогов
     cards = {c.query_selector(".card-title").inner_text(): c.inner_text()
              for c in page.query_selector_all("#today-totals .card")}
     assert set(cards) == {"TRY", "USD"}

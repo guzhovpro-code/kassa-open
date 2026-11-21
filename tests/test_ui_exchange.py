@@ -4,10 +4,27 @@
 import pytest
 
 from kassa_api import cards, db
-from test_ui import ONLINE, PRESS, browser, page, server  # noqa: F401
-from test_ui8 import open_url, q
+import urllib.parse
+
+from helpers import OWNER, make_init_data
+from test_ui import ONLINE, PRESS, PRIV, TOKEN, browser, page, server  # noqa: F401
 
 pytest.importorskip("playwright.sync_api")
+
+
+def open_url(page, port, query=""):
+    init = make_init_data(PRIV, user_id=OWNER)
+    hash_ = urllib.parse.urlencode({"tgWebAppData": init, "tgWebAppVersion": "8.0", "tgWebAppPlatform": "ios"})
+    page.goto("http://127.0.0.1:%d/%s/%s#%s" % (port, TOKEN, query, hash_))
+    page.wait_for_selector("#form:not([hidden]), #stub:not([hidden]), #view-inbox:not([hidden])")
+
+
+def q(path, sql, args=()):
+    c = db.connect(path, readonly=True)
+    try:
+        return [tuple(r) for r in c.execute(sql, args)]
+    finally:
+        c.close()
 pytestmark = pytest.mark.skipif(not ONLINE, reason="telegram.org недоступен")
 
 EXAMPLE = "поменял 201 230 рублей на 75 000 лир и 700 долларов, комиссия 758,65"
