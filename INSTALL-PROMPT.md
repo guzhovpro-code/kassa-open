@@ -42,7 +42,7 @@ mkdir -p data
 Необязательные: `KASSA_TZ`, `KASSA_REMINDER_ENABLED` (`1`) и `KASSA_REMINDER_TIME` (`ЧЧ:ММ`), `KASSA_VOICE_ENABLED`
 (`0` выключает голос), `KASSA_WHISPER_MODEL` (`tiny`, `base`, `small`). Допиши
 `KASSA_UID=$(id -u)` и `KASSA_GID=$(id -g)` в `.env`, чтобы контейнеры могли писать в `./data`.
-Пока адрес туннеля неизвестен (шаг 4Б), впиши временный `https://example.invalid` и поправь позже.
+Туннель (шаг 4Б) удобнее поднять до запуска контейнеров и сразу вписать настоящий адрес; пока его нет, впиши временный `https://example.invalid` и поправь до `docker compose up`.
 
 Проверь, что обязательные переменные непустые, не печатая значения:
 `for k in KASSA_BOT_TOKEN KASSA_ALLOWED_IDS KASSA_PUBLIC_URL KASSA_INTERNAL_TOKEN; do grep -q "^$k=." .env && echo "$k ok" || echo "$k ПУСТО"; done`
@@ -62,7 +62,7 @@ mkdir -p data
 Проверь, что домен указывает на эту машину (`dig +short <домен>`), порты 80 и 443 открыты. Адрес = `https://<домен>`.
 
 **Б. Туннель без домена.** Выбери то, что уже есть или легко ставится:
-- `cloudflared tunnel --url http://127.0.0.1:8080` (cloudflared quick tunnel): запусти в фоне, из его вывода возьми адрес
+- `cloudflared tunnel --url http://127.0.0.1:8080` (cloudflared quick tunnel): запусти в фоне через `setsid nohup ... &`, PID возьми через `pgrep -f "cloudflared tunnel"` (не `$!`: это PID обёртки), из его журнала возьми адрес
   `https://....trycloudflare.com`. Адрес меняется при перезапуске туннеля: предупреди человека.
 - `tailscale funnel --bg 8080`, если установлен Tailscale и включён Funnel: адрес - `https://<имя-машины>.<tailnet>.ts.net`.
 
@@ -86,14 +86,14 @@ docker compose ps
 3. Бот жив: `curl -fsS "https://api.telegram.org/bot${KASSA_BOT_TOKEN}/getMe"` - `"ok":true` (не показывай вывод целиком, он
    безвреден, но команду с токеном в логи не выноси).
 4. Попроси человека: открыть бота, нажать `/start` (придёт кнопка «Касса»), написать «кофе 150 лир». Придёт карточка;
-   «Верно» откроет форму, «Записать» сохранит запись. Убедись, что запись есть:
+   «Верно» (или «Записать») откроет форму, «Записать» в форме сохранит запись. Убедись, что запись есть:
    `docker compose exec -T api python -c "import sqlite3;print(sqlite3.connect('/data/kassa.db').execute('select count(*) from transactions').fetchone()[0])"`
    - число больше нуля.
 5. Голос (если включён): человек отправляет боту голосовое «кофе сто пятьдесят лир». Первое сообщение скачивает модель,
    это занимает минуты (следи `docker compose logs -f bot`). Придёт карточка. Не пришла: см. журнал бота; нет места
    или памяти - предложи `KASSA_WHISPER_MODEL=base` или `tiny` и `docker compose up -d`.
 6. Если включено напоминание, проверь строку в `.env`; сработает оно в заданное время, если за день нет записей.
-7. Сделай первую резервную копию: `python3 scripts/backup_db.py` и покажи человеку путь.
+7. Сделай первую резервную копию: `python3 scripts/backup_db.py`; копии лежат в `backups/` в корне проекта, покажи путь.
 
 ## Шаг 7. Итог человеку
 
