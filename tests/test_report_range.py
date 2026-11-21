@@ -30,7 +30,7 @@ def test_single_day_is_from_equals_to(conn):
 
 def test_range_has_month_shape_and_same_numbers_as_month(conn):
     add(conn, "out", 10000, usd=300, category="кафе")
-    add(conn, "in", 50000, "USDT", usd=50000, method="bybit", category="доход")
+    add(conn, "in", 50000, "USDT", usd=50000, method="okx", category="доход")
     add(conn, "in", 7000, "TRY", usd=None, method="cash", category="доход")           # без курса
     add(conn, "out", 900, status="cancelled")
     month = reports.report(conn, "month", "2026-10", TODAY)
@@ -79,7 +79,7 @@ def test_range_limit_is_400_days_inclusive():
 def test_http_range_matches_month_and_needs_auth(env):
     port, _ = env
     api_add(port, amount="1234,50", note="для теста")
-    api_add(port, amount="10", currency="USD", direction="in", category="доход", method="bybit")
+    api_add(port, amount="10", currency="USD", direction="in", category="доход", method="okx")
     first = API_TODAY[:7] + "-01"
     s, month = call(port, "GET", "api/report?period=month")
     s2, rng = call(port, "GET", "api/report?period=range&from=%s&to=%s" % (first, API_TODAY))

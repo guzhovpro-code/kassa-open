@@ -83,8 +83,8 @@ def seed_month(path, day):
     seed(path, cents=120000, cur="TRY", category="кафе", usd=3600, day=day)
     seed(path, cents=40000, cur="TRY", category="бар", usd=1200, day=day)
     seed(path, cents=9000, cur="USD", category="такси", usd=900, day=day)
-    seed(path, cents=500000, cur="USD", direction="in", category="доход", method="bybit", usd=500000, day=day)
-    seed(path, cents=100000, cur="USD", direction="in", category="доход", method="tinkoff", usd=100000, day=day)
+    seed(path, cents=500000, cur="USD", direction="in", category="доход", method="okx", usd=500000, day=day)
+    seed(path, cents=100000, cur="USD", direction="in", category="доход", method="revolut", usd=100000, day=day)
 
 
 # --- расходы по категориям --------------------------------------------------------------------------------------
@@ -132,7 +132,7 @@ def test_income_by_method_bars(page, server):
     tab(page, "month")
     page.wait_for_selector("#month-methods-bars .bar-row")
     rows = bar_rows(page, "month-methods-bars")
-    assert [r["name"] for r in rows] == ["Bybit", "Тинькофф"] and rows[0]["width"] == "100%"
+    assert [r["name"] for r in rows] == ["Биржа OKX", "Карта Revolut"] and rows[0]["width"] == "100%"
     assert sum(r["cents"] for r in rows) == usd_sum(path, month=MONTH0, direction="in") == 600000
 
 
@@ -170,7 +170,7 @@ def test_today_chart_ignores_income_and_deleted_when_counting_categories(page, s
     port, path = server
     seed(path, cents=1000, cur="USD", category="кафе", usd=1000)
     seed(path, cents=2500, cur="USD", category="бар", usd=2500)
-    seed(path, cents=9900, cur="USD", direction="in", category="доход", method="bybit", usd=9900)
+    seed(path, cents=9900, cur="USD", direction="in", category="доход", method="okx", usd=9900)
     seed(path, cents=700, cur="USD", category="такси", usd=700, status="cancelled")
     open_app(page, port)
     tab(page, "today")
@@ -199,7 +199,7 @@ def test_trend_matches_month_reports_and_marks_closed_months(page, server):
     port, path = server
     seed_month(path, TODAY)                                                          # текущий месяц
     seed(path, cents=777000, cur="TRY", category="кафе", usd=20000, day=MONTH1 + "-10")
-    seed(path, cents=300000, cur="USD", direction="in", category="доход", method="bybit", usd=300000,
+    seed(path, cents=300000, cur="USD", direction="in", category="доход", method="okx", usd=300000,
          day=MONTH1 + "-11")
     c = db.connect(path)
     c.execute("INSERT INTO closed_months(month, closed_at, source_name, source_sha, expected, rows_in, rows_out) "
@@ -262,7 +262,7 @@ def long_data(path):
     for m in range(5, int(MONTH0[5:7])):
         seed(path, cents=2000000 + m * 100, cur="USD", category="жильё", usd=2000000 + m * 100,
              day="2026-%02d-05" % m)
-        seed(path, cents=900000, cur="USD", direction="in", category="доход", method="bybit", usd=900000,
+        seed(path, cents=900000, cur="USD", direction="in", category="доход", method="okx", usd=900000,
              day="2026-%02d-06" % m)
 
 
@@ -397,8 +397,8 @@ def test_tap_on_bar_opens_details_with_count_and_currency_sums_and_closes(page, 
     seed(path, cents=50000, cur="TRY", category="кафе", usd=1250)
     seed(path, cents=1000, cur="USD", category="кафе", usd=1000)
     seed(path, cents=700, cur="USD", category="такси", usd=700)
-    seed(path, cents=2000, cur="USD", direction="in", category="доход", method="bybit", usd=2000)
-    seed(path, cents=300, cur="USDT", direction="in", category="доход", method="bybit", usd=300)
+    seed(path, cents=2000, cur="USD", direction="in", category="доход", method="okx", usd=2000)
+    seed(path, cents=300, cur="USDT", direction="in", category="доход", method="okx", usd=300)
     open_app(page, port)
     tab(page, "month")
     page.wait_for_selector("#month-cats-bars .bar-row")

@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from helpers import METHODS
 from kassa_api import exchangetext
 
 TESTS = Path(__file__).resolve().parent
@@ -94,9 +95,9 @@ POSITIVE = [
     ("купила 100 евро за 4500 лир, комиссия 50 лир", ("4500", "TRY", None, [("100", "EUR", None, None)], ("50", "TRY"), TODAY)),
     ("продал 500 usd за 20 000 лир", ("500", "USD", None, [("20000", "TRY", None, None)], None, TODAY)),
     ("продал 300 евро за 12000 лир, комиссия 100 лир", ("300", "EUR", None, [("12000", "TRY", None, None)], ("100", "TRY"), TODAY)),
-    ("обменял 5000 рублей на 100 долларов с тинькофф", ("5000", "RUB", "tinkoff", [("100", "USD", None, None)], None, TODAY)),
-    ("обменял 5000 рублей на 100 долларов со сбера", ("5000", "RUB", "sber", [("100", "USD", None, None)], None, TODAY)),
-    ("поменял с тинькофф 100 долларов на 3500 лир", ("100", "USD", "tinkoff", [("3500", "TRY", None, None)], None, TODAY)),
+    ("обменял 5000 рублей на 100 долларов с revolut", ("5000", "RUB", "revolut", [("100", "USD", None, None)], None, TODAY)),
+    ("обменял 5000 рублей на 100 долларов со wise", ("5000", "RUB", "wise", [("100", "USD", None, None)], None, TODAY)),
+    ("поменял с revolut 100 долларов на 3500 лир", ("100", "USD", "revolut", [("3500", "TRY", None, None)], None, TODAY)),
     ("поменял 5000 рублей на 100 долларов наличными", ("5000", "RUB", None, [("100", "USD", "cash", None)], None, TODAY)),
     ("купил 700 долларов за 30000 рублей налом", ("30000", "RUB", "cash", [("700", "USD", None, None)], None, TODAY)),
     ("поменял 201230 рублей на 75000 лир и 700 долларов, из них 150 000 на лиры",
@@ -116,7 +117,7 @@ POSITIVE = [
 
 
 def shape(text):
-    r = exchangetext.parse(text, TODAY)
+    r = exchangetext.parse(text, TODAY, METHODS)
     assert r is not None, text
     return (r["give"]["amount"], r["give"]["currency"], r["give"]["method"],
             [(g["amount"], g["currency"], g["method"], g["part"]) for g in r["get"]],
@@ -133,7 +134,7 @@ def test_no_ordinary_money_phrase_of_the_existing_tests_becomes_an_exchange():
     bad = []
     for text in ORDINARY:
         try:
-            if exchangetext.parse(text, TODAY) is not None:
+            if exchangetext.parse(text, TODAY, METHODS) is not None:
                 bad.append(text)
         except exchangetext.ExchangeReject:
             bad.append("REJECT: " + text)
@@ -142,7 +143,7 @@ def test_no_ordinary_money_phrase_of_the_existing_tests_becomes_an_exchange():
 
 @pytest.mark.parametrize("text", ADVERSARIAL)
 def test_adversarial_two_currency_phrases_are_never_exchanges(text):
-    assert exchangetext.parse(text, TODAY) is None
+    assert exchangetext.parse(text, TODAY, METHODS) is None
 
 
 @pytest.mark.parametrize("text,expected", POSITIVE)
@@ -154,10 +155,10 @@ def test_positive_exchange_phrases_parse_exactly(text, expected):
 def test_a_trailing_extra_clause_turns_any_positive_phrase_into_a_non_exchange(text):
     """Строгая грамматика: любой лишний хвост («и оплатил ...», «на карту», второе предложение) - не обмен."""
     for tail in (" и оплатил 20 долларов за подписку", " на карту", ". Потом купил кофе за 120 лир", " и купил хлеб"):
-        assert exchangetext.parse(text.rstrip(".") + tail, TODAY) is None, text + tail
+        assert exchangetext.parse(text.rstrip(".") + tail, TODAY, METHODS) is None, text + tail
 
 
 @pytest.mark.parametrize("text", [t for t, _ in POSITIVE])
 def test_a_leading_extra_clause_turns_any_positive_phrase_into_a_non_exchange(text):
     for head in ("оплатил 20 долларов за подписку и ", "купил хлеб, ", "Потом "):
-        assert exchangetext.parse(head + text, TODAY) is None, head + text
+        assert exchangetext.parse(head + text, TODAY, METHODS) is None, head + text

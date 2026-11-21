@@ -60,12 +60,12 @@ def test_first_native_id_is_above_floor(conn):
 
 
 def test_expense_with_method_and_note(conn):
-    res = records.create_record(conn, ACTOR, body(method="redot", note="  кофе   у дома "), now=NOW)
+    res = records.create_record(conn, ACTOR, body(method="monzo", note="  кофе   у дома "), now=NOW)
     r = conn.execute("SELECT method, note FROM transactions WHERE id=?", (res["id"],)).fetchone()
-    assert (r["method"], r["note"]) == ("redot", "кофе у дома")
+    assert (r["method"], r["note"]) == ("monzo", "кофе у дома")
 
 
-@pytest.mark.parametrize("method", ["cash", "redot", "tinkoff", "kaspi", "bybit", "sber"])
+@pytest.mark.parametrize("method", ["cash", "monzo", "revolut", "n26", "okx", "wise"])
 def test_expense_accepts_every_expense_method(conn, method):
     assert records.create_record(conn, ACTOR, body(method=method, client_id=str(uuid.uuid4())), now=NOW)["ok"]
 
@@ -81,7 +81,7 @@ def test_expense_without_method_is_422(conn, patch):
 
 
 def test_expense_cannot_use_income_only_method(conn):
-    assert err(conn, body(method="cold_wallet")).code == "unknown_method"
+    assert err(conn, body(method="ledger")).code == "unknown_method"
     assert err(conn, body(method="card")).code == "unknown_method"          # «Картой» снят: способы конкретные
     assert count(conn) == 0
 
@@ -135,15 +135,15 @@ def test_income_without_method_is_422(conn):
 
 
 def test_income_with_method(conn):
-    res = records.create_record(conn, ACTOR, body(direction="in", category="доход", method="redot", currency="USD"),
+    res = records.create_record(conn, ACTOR, body(direction="in", category="доход", method="monzo", currency="USD"),
                                 now=NOW)
     r = conn.execute("SELECT * FROM transactions WHERE id=?", (res["id"],)).fetchone()
-    assert (r["direction"], r["method"], r["amount_cents"]) == ("in", "redot", 50000)
+    assert (r["direction"], r["method"], r["amount_cents"]) == ("in", "monzo", 50000)
 
 
 def test_all_decided_methods_exist(conn):
     titles = {m["title"] for m in records.meta(conn, True, NOW)["methods"] if m["scope"] in ("in", "both")}
-    assert {"Bybit", "Тинькофф", "Сбер", "Redot", "Kaspi", "Наличные", "Холодный кошелёк"} <= titles
+    assert {"Биржа OKX", "Карта Revolut", "Карта Wise", "Карта Monzo", "Карта N26", "Наличные", "Кошелёк Ledger"} <= titles
 
 
 def test_new_method_other(conn):
@@ -178,9 +178,9 @@ def test_new_method_for_expense_has_expense_scope(conn):
 
 
 def test_new_method_matching_existing_title_reuses_it(conn):
-    res = records.create_record(conn, ACTOR, body(direction="in", category="доход", method=None, new_method="СБЕР"),
+    res = records.create_record(conn, ACTOR, body(direction="in", category="доход", method=None, new_method="КАРТА WISE"),
                                 now=NOW)
-    assert conn.execute("SELECT method FROM transactions WHERE id=?", (res["id"],)).fetchone()[0] == "sber"
+    assert conn.execute("SELECT method FROM transactions WHERE id=?", (res["id"],)).fetchone()[0] == "wise"
 
 
 @pytest.mark.parametrize("title", ["Другой", "другая", "  ДРУГОЕ "])
@@ -189,7 +189,7 @@ def test_new_method_reserved_word_rejected(conn, title):
 
 
 def test_new_method_not_with_code_and_not_too_long(conn):
-    assert err(conn, body(direction="in", category="доход", method="bybit", new_method="X")).code == "method_conflict"
+    assert err(conn, body(direction="in", category="доход", method="okx", new_method="X")).code == "method_conflict"
     assert err(conn, body(method="cash", new_method="X")).code == "method_conflict"
     assert err(conn, body(direction="in", category="доход", method=None, new_method="x" * 31)).code ==         "bad_new_method"
     assert count(conn) == 0
@@ -271,7 +271,7 @@ def test_outlier_needs_ten_records_same_currency_active_window_and_expenses(conn
 
 def test_outlier_does_not_apply_to_income(conn):
     seed_expenses(conn, [10000] * 10)
-    assert records.create_record(conn, ACTOR, body(direction="in", category="доход", method="bybit",
+    assert records.create_record(conn, ACTOR, body(direction="in", category="доход", method="okx",
                                                    amount="999999"), now=NOW)["ok"]
 
 
@@ -355,7 +355,7 @@ def test_meta_last_currency_and_flags(conn):
     assert m["test"] is True and m["today"] == "2026-10-14"
     assert m["last_currency"] == {"out": "TRY", "in": "TRY"}
     records.create_record(conn, ACTOR, body(currency="USD"), now=NOW)
-    records.create_record(conn, ACTOR, body(direction="in", category="доход", method="bybit", currency="USDT"),
+    records.create_record(conn, ACTOR, body(direction="in", category="доход", method="okx", currency="USDT"),
                           now=NOW + timedelta(seconds=5))
     m = records.meta(conn, True, NOW)
     assert m["last_currency"] == {"out": "USD", "in": "USDT"}
@@ -364,7 +364,7 @@ def test_meta_last_currency_and_flags(conn):
     assert len(m["categories"]["out"]) == 14
     assert m["defaults"] == {"out": "прочее", "in": "доход"}
     out_methods = {x["code"] for x in m["methods"] if x["scope"] in ("out", "both")}
-    assert out_methods == {"cash", "redot", "tinkoff", "kaspi", "bybit", "sber"}
+    assert out_methods == {"cash", "monzo", "revolut", "n26", "okx", "wise"}
     assert "card" not in {x["code"] for x in m["methods"]}              # «Картой» снят
 
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import OWNER, STRANGER, make_init_data
+from helpers import METHODS, OWNER, STRANGER, make_init_data
 from kassa_api import cards, db, exchanges, exchangetext, records, reports
 from kassa_api.records import RecordError
 from test_api import INTERNAL, PRIV, TOKEN, req
@@ -38,9 +38,9 @@ def conn(path):
 
 
 def body(**kw):
-    """Обмен из примера владельца: 201 230 RUB -> 75 000 TRY + 700 USD, комиссия 758,65 RUB, отдано с Тинькофф."""
+    """Обмен из примера владельца: 201 230 RUB -> 75 000 TRY + 700 USD, комиссия 758,65 RUB, отдано с Карта Revolut."""
     base = {"client_id": str(uuid.uuid4()), "date": TODAY,
-            "give": {"amount": "201230", "currency": "RUB", "method": "tinkoff"},
+            "give": {"amount": "201230", "currency": "RUB", "method": "revolut"},
             "get": [{"amount": "75000", "currency": "TRY"}, {"amount": "700", "currency": "USD"}],
             "fee": {"amount": "758,65"}, "note": "обмен у знакомого"}
     base.update(kw)
@@ -86,7 +86,7 @@ def make_v6(p):
                   "method, occurred_on, created_at, source, via, actor_id) VALUES (?,?,?,?,?,?,?,?, '2026-10-0%d', "
                   "'2026-10-0%dT00:00:00Z','kassa','webapp','1')" % (i, i),
                   ("old-%d" % i, d, 1000 * i, cur, 500 * i, "доход" if d == "in" else "кафе", "заметка %d" % i,
-                   "bybit" if d == "in" else "cash"))
+                   "okx" if d == "in" else "cash"))
     c.close()
 
 
@@ -99,11 +99,11 @@ def test_migration_6_to_7_keeps_data_and_adds_tables(tmp_path):
     c.close()
     db.init_db(p)
     c = db.connect(p)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 7
+    assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert [r["name"] for r in c.execute("PRAGMA table_info(transactions)")][-2:] == ["exchange_id", "exchange_removed"]
     new_rows = [tuple(r) for r in c.execute("SELECT * FROM transactions ORDER BY id")]
     assert [r[:-2] for r in new_rows] == old_rows and all(r[-2:] == (None, None) for r in new_rows)
-    assert [tuple(r) for r in c.execute("SELECT * FROM methods ORDER BY code")] == old_methods
+    assert [tuple(r)[:5] for r in c.execute("SELECT * FROM methods ORDER BY code")] == old_methods     # схема 8 добавила kind
     assert [r["name"] for r in c.execute("PRAGMA table_info(exchanges)")] == [
         "id", "idem_key", "occurred_on", "created_at", "give_cents", "give_currency", "give_method", "note", "status",
         "cancelled_at", "via", "actor_id"]
@@ -149,7 +149,7 @@ def test_failed_migration_7_rolls_back_to_version_6(tmp_path, monkeypatch):
     monkeypatch.undo()
     db.init_db(p)
     c = db.connect(p, readonly=True)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     c.close()
 
 
@@ -167,7 +167,7 @@ def test_database_constraints_refuse_nonsense(conn):
 
 # --- разбор фразы ------------------------------------------------------------------------------------------------------
 def parse(text, today=TODAY):
-    return exchangetext.parse(text, today)
+    return exchangetext.parse(text, today, METHODS)
 
 
 def shape(text, today=TODAY):
@@ -200,9 +200,9 @@ PARSED = [
     ("продал 500 usd за 20 000 лир", ("500", "USD", None, [("20000", "TRY", None, None)], None, TODAY)),
     ("продал 300 евро за 12000 лир, комиссия 100 лир", ("300", "EUR", None, [("12000", "TRY", None, None)],
                                                        ("100", "TRY"), TODAY)),
-    ("обменял 5000 рублей на 100 долларов с тинькофф", ("5000", "RUB", "tinkoff", [("100", "USD", None, None)], None,
+    ("обменял 5000 рублей на 100 долларов с revolut", ("5000", "RUB", "revolut", [("100", "USD", None, None)], None,
                                                        TODAY)),
-    ("обменял 5000 рублей на 100 долларов со сбера", ("5000", "RUB", "sber", [("100", "USD", None, None)], None,
+    ("обменял 5000 рублей на 100 долларов со wise", ("5000", "RUB", "wise", [("100", "USD", None, None)], None,
                                                      TODAY)),
     ("поменял 5000 рублей на 100 долларов наличными", ("5000", "RUB", None, [("100", "USD", "cash", None)], None,
                                                       TODAY)),
@@ -273,10 +273,10 @@ def test_unsure_exchange_gives_no_card_and_a_reply(conn):
 
 
 def test_methods_not_fitting_direction_are_dropped_from_draft(conn):
-    r = cards.create_from_text(conn, OWNER, OWNER, "phrase", "поменял 100 долларов на 4000 лир с холодного кошелька", "4",
+    r = cards.create_from_text(conn, OWNER, OWNER, "phrase", "поменял 100 долларов на 4000 лир с ledger", "4",
                                now=NOW)
     d = json.loads(one(conn, "SELECT draft FROM cards WHERE id=?", (r["card_id"],))[0])
-    assert d["give"]["method"] is None                      # холодный кошелёк - только поступления
+    assert d["give"]["method"] is None                      # Ledger - только поступления
 
 
 # --- доли и оценка ----------------------------------------------------------------------------------------------------
@@ -289,7 +289,7 @@ def test_create_exchange_stores_rows_and_estimates_shares_by_usd_value(conn):
     assert res["ok"] and not res["duplicate_request"] and res["estimated"] is True and res["fee_id"]
     row = dict(one(conn, "SELECT * FROM exchanges WHERE id=?", (res["id"],)))
     assert (row["give_cents"], row["give_currency"], row["give_method"], row["status"], row["via"]) == \
-           (20123000, "RUB", "tinkoff", "active", "webapp")
+           (20123000, "RUB", "revolut", "active", "webapp")
     assert row["actor_id"] == str(OWNER) and row["occurred_on"] == TODAY and row["idem_key"].startswith("webapp:")
     a, b = legs(conn, res["id"])
     assert (a["get_cents"], a["get_currency"], b["get_cents"], b["get_currency"]) == (7500000, "TRY", 70000, "USD")
@@ -370,7 +370,7 @@ def test_bad_requests_are_refused_and_nothing_is_written(conn, change, code):
 
 
 def test_give_method_must_fit_direction_and_fee_needs_a_method(conn):
-    assert err(conn, body(give={"amount": "100", "currency": "RUB", "method": "cold_wallet"})).code == "unknown_method"
+    assert err(conn, body(give={"amount": "100", "currency": "RUB", "method": "ledger"})).code == "unknown_method"
     assert err(conn, body(give={"amount": "100", "currency": "RUB"})).code == "method_required"      # комиссия без способа
     ok = body(give={"amount": "100", "currency": "RUB"}, fee=None)
     assert make(conn, ok)["fee_id"] is None                                                           # без комиссии способ не обязателен
@@ -386,7 +386,7 @@ def test_fee_is_an_ordinary_expense_linked_to_the_exchange(conn):
     t = fee_row(conn, res["id"])
     assert t["id"] == res["fee_id"] and (t["direction"], t["amount_cents"], t["currency"]) == ("out", 75865, "RUB")
     assert (t["category"], t["method"], t["status"], t["source"], t["via"]) == (
-        exchanges.FEE_CATEGORY, "tinkoff", "active", "kassa", "webapp")
+        exchanges.FEE_CATEGORY, "revolut", "active", "kassa", "webapp")
     assert t["occurred_on"] == TODAY and t["usd_cents"] == 948                # 758,65 RUB по курсу кэша 80 за доллар
     assert one(conn, "SELECT COUNT(*) FROM v_legacy")[0] == 1               # в v_legacy только комиссия, обмена там нет
 
@@ -463,7 +463,7 @@ def test_same_client_id_returns_the_same_exchange_without_a_second_row(conn):
 def test_same_client_id_with_other_data_is_a_conflict(conn):
     p = body()
     make(conn, p)
-    other = dict(p, give={"amount": "201231", "currency": "RUB", "method": "tinkoff"})
+    other = dict(p, give={"amount": "201231", "currency": "RUB", "method": "revolut"})
     assert err(conn, other).code == "idem_conflict" and err(conn, other).status == 409
     no_fee = dict(p, fee=None)
     assert err(conn, no_fee).code == "idem_conflict"
@@ -480,7 +480,7 @@ def test_backend_key_for_transfer_of_old_exchange(conn):
 # --- правка ------------------------------------------------------------------------------------------------------------
 def test_update_recalculates_estimated_shares_and_edits_the_fee(conn):
     ex = make(conn)["id"]
-    r = exchanges.update_exchange(conn, OWNER, ex, {"give": {"amount": "200000", "currency": "RUB", "method": "tinkoff"},
+    r = exchanges.update_exchange(conn, OWNER, ex, {"give": {"amount": "200000", "currency": "RUB", "method": "revolut"},
                                                    "fee": {"amount": "800"}, "note": "поправил"}, now=NOW, fx_rates=RATES)
     assert sorted(r["changed"]) == ["fee", "give", "note"]
     a, b = legs(conn, ex)
@@ -562,13 +562,13 @@ def test_voice_card_has_verno_and_cancel(conn):
 def test_confirm_exchange_draft_writes_closes_card_and_edits_the_chat(conn):
     cid = card(conn)
     conn.execute("UPDATE cards SET message_id='55' WHERE id=?", (cid,))
-    data = body(give={"amount": "201230", "currency": "RUB", "method": "tinkoff"})
+    data = body(give={"amount": "201230", "currency": "RUB", "method": "revolut"})
     res = cards.confirm_exchange_draft(conn, OWNER, cid, data, URL, True, fx_rates=RATES, now=NOW)
     assert res["ok"] and not res["duplicate_request"]
     assert tup(conn, "SELECT status, tx_id FROM cards WHERE id=?", (cid,)) == ("confirmed", res["id"])
     assert one(conn, "SELECT idem_key FROM exchanges")[0] == "card:%d" % cid
     out = [json.loads(r[0]) for r in conn.execute("SELECT payload FROM outbox WHERE kind='edit'")]
-    assert out and out[-1]["text"].startswith("✅ Записан обмен №%d" % res["id"]) and "Тинькофф" in out[-1]["text"]
+    assert out and out[-1]["text"].startswith("✅ Записан обмен №%d" % res["id"]) and "Карта Revolut" in out[-1]["text"]
     again = cards.confirm_exchange_draft(conn, OWNER, cid, data, URL, True, fx_rates=RATES, now=NOW)
     assert again["duplicate_request"] is True and one(conn, "SELECT COUNT(*) FROM exchanges")[0] == 1
     with pytest.raises(RecordError) as e:                       # тот же черновик с другими данными - не вторая запись
@@ -796,7 +796,7 @@ PURCHASES_ONE_CURRENCY = [
 
 @pytest.mark.parametrize("text", PURCHASES_TWO_CURRENCIES)
 def test_purchase_with_two_currencies_is_never_an_exchange_card(conn, text):
-    assert exchangetext.parse(text, TODAY) is None
+    assert exchangetext.parse(text, TODAY, METHODS) is None
     r = cards.create_from_text(conn, OWNER, OWNER, "phrase", text, "p-" + text[:12], now=NOW)
     assert r.get("reject") != "unsure_exchange"                          # обычный разбор, а не карточка обмена
     assert one(conn, "SELECT COUNT(*) FROM exchanges")[0] == 0
@@ -806,7 +806,7 @@ def test_purchase_with_two_currencies_is_never_an_exchange_card(conn, text):
 
 @pytest.mark.parametrize("text,amount,currency", PURCHASES_ONE_CURRENCY)
 def test_ordinary_purchase_goes_the_expense_way(conn, text, amount, currency):
-    assert exchangetext.parse(text, TODAY) is None
+    assert exchangetext.parse(text, TODAY, METHODS) is None
     r = cards.create_from_text(conn, OWNER, OWNER, "phrase", text, "q-" + text[:12], now=NOW)
     assert r["ok"] is True
     d = json.loads(one(conn, "SELECT draft FROM cards WHERE id=?", (r["card_id"],))[0])
@@ -822,7 +822,7 @@ def test_ordinary_purchase_goes_the_expense_way(conn, text, amount, currency):
     ("продал 1000 евро за 40000 лир наличными", ("1000", "EUR"), [("40000", "TRY")]),
 ])
 def test_buying_or_selling_a_currency_is_still_an_exchange(text, give, get):
-    r = exchangetext.parse(text, TODAY)
+    r = exchangetext.parse(text, TODAY, METHODS)
     assert r is not None and (r["give"]["amount"], r["give"]["currency"]) == give
     assert [(g["amount"], g["currency"]) for g in r["get"]] == get
 
@@ -834,7 +834,7 @@ def test_buying_a_currency_without_amount_is_refused_not_a_spend():
 
 # --- доли, округлённые до нуля центов -----------------------------------------------------------------------------------
 def test_tiny_leg_still_gets_one_cent_and_shares_add_up(conn):
-    payload = body(give={"amount": "0.03", "currency": "RUB", "method": "tinkoff"}, fee=None,
+    payload = body(give={"amount": "0.03", "currency": "RUB", "method": "revolut"}, fee=None,
                    get=[{"amount": "1000000", "currency": "TRY"}, {"amount": "1", "currency": "USD"}])
     a, b = legs(conn, make(conn, payload)["id"])
     assert a["give_part_cents"] + b["give_part_cents"] == 3
@@ -842,7 +842,7 @@ def test_tiny_leg_still_gets_one_cent_and_shares_add_up(conn):
 
 
 def test_not_enough_cents_for_every_leg_leaves_shares_empty_but_saves(conn):
-    payload = body(give={"amount": "0.01", "currency": "RUB", "method": "tinkoff"}, fee=None,
+    payload = body(give={"amount": "0.01", "currency": "RUB", "method": "revolut"}, fee=None,
                    get=[{"amount": "1000", "currency": "TRY"}, {"amount": "10", "currency": "USD"}])
     a, b = legs(conn, make(conn, payload)["id"])
     assert a["give_part_cents"] is None and b["give_part_cents"] is None and one(conn, "SELECT COUNT(*) FROM exchanges")[0] == 1
@@ -850,7 +850,7 @@ def test_not_enough_cents_for_every_leg_leaves_shares_empty_but_saves(conn):
 
 def test_shares_always_add_up_to_the_rest(conn):
     for give in ("1", "17,31", "201230", "0,07", "999999,99"):
-        payload = body(give={"amount": give, "currency": "RUB", "method": "tinkoff"}, fee=None, client_id=str(uuid.uuid4()),
+        payload = body(give={"amount": give, "currency": "RUB", "method": "revolut"}, fee=None, client_id=str(uuid.uuid4()),
                        get=[{"amount": "75000", "currency": "TRY"}, {"amount": "700", "currency": "USD"}, {"amount": "3", "currency": "EUR"}])
         ex = make(conn, payload)["id"]
         total = sum(l["give_part_cents"] for l in legs(conn, ex))
@@ -861,7 +861,7 @@ def test_shares_always_add_up_to_the_rest(conn):
 # --- перенос обмена: привязка уже записанной комиссии ----------------------------------------------------------------------
 def old_fee(conn, **kw):
     row = {"idem_key": "old-fee-774", "direction": "out", "amount_cents": 75865, "currency": "RUB", "usd_cents": 948,
-           "category": "прочее", "note": "комиссия", "method": "tinkoff", "occurred_on": TODAY,
+           "category": "прочее", "note": "комиссия", "method": "revolut", "occurred_on": TODAY,
            "created_at": "2026-10-14T09:00:00Z", "status": "active", "source": "kassa", "via": "webapp", "actor_id": "1001"}
     row.update(kw)
     cols = ", ".join(row)

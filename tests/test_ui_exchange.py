@@ -35,7 +35,7 @@ def to_exchange_mode(page):
     page.wait_for_selector("#xform:not([hidden])")
 
 
-def fill_example(page, method="Тинькофф"):
+def fill_example(page, method="Карта Revolut"):
     page.fill("#x-give-amount", "201230")
     page.select_option("#x-give-cur", "RUB")
     if method:
@@ -86,9 +86,9 @@ def test_exchange_from_the_form_is_written_with_signature_and_listed(page, serve
     assert "Обмен записан №" in page.locator("#ok-text").inner_text()
     assert count(path) == before + 1 and count(path, "exchange_legs") >= 2
     row = q(path, "SELECT give_cents, give_currency, give_method, via FROM exchanges ORDER BY id DESC LIMIT 1")[0]
-    assert row == (20123000, "RUB", "tinkoff", "webapp")
+    assert row == (20123000, "RUB", "revolut", "webapp")
     assert q(path, "SELECT amount_cents, category, method FROM transactions WHERE exchange_id IS NOT NULL "
-                   "ORDER BY id DESC LIMIT 1") == [(75865, "Комиссия обмена", "tinkoff")]
+                   "ORDER BY id DESC LIMIT 1") == [(75865, "Комиссия обмена", "revolut")]
     assert page.locator("#x-give-amount").input_value() == ""              # форма очищена
     # «↩ Отменить» отменяет именно обмен
     page.locator("#undo").click()
@@ -134,7 +134,7 @@ def test_draft_from_chat_opens_the_exchange_form_and_saving_closes_the_card(page
     assert page.locator("#x-legs .xleg").count() == 2
     assert page.locator("#x-legs .xleg").nth(0).locator(".x-leg-cur").input_value() == "TRY"
     assert page.locator("#x-fee-amount").input_value() == "758.65"
-    page.select_option("#x-give-method", label="Тинькофф")
+    page.select_option("#x-give-method", label="Карта Revolut")
     page.evaluate(PRESS)
     page.wait_for_selector("#ok:not([hidden])")
     assert q(path, "SELECT status FROM cards WHERE id=?", (cid,)) == [("confirmed",)]
@@ -174,7 +174,7 @@ def test_exchanges_tab_lists_rates_and_cancel_restore_edit_work(page, server):
     text = row.inner_text().replace(" ", " ")           # fmtCents ставит узкий неразрывный пробел
     assert "201 230 RUB → 75 000 TRY, 700 USD" in text and "комиссия 758,65 RUB" in text
     assert "курс не посчитан" in text or "≈ 1 TRY =" in text                 # курсов в тесте нет или оценка
-    assert "отдал: Тинькофф" in text and "обменник" in text
+    assert "отдал: Карта Revolut" in text and "обменник" in text
 
     row.click()                                                              # удалить
     row.locator("button", has_text="Удалить").click()

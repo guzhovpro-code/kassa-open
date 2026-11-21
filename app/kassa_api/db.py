@@ -11,6 +11,8 @@ outbox.message_id (id сообщения в Telegram, чтобы править 
 Схема 7: обмен валют: exchanges (обмен: отдано, дата, способ отдачи) и exchange_legs (1-3 полученные валюты с долей
 отданного), transactions.exchange_id (комиссия обмена - обычный расход, связанный с обменом) и exchange_removed
 (убранная комиссия). В доходы и расходы обмен не попадает: он живёт в своих таблицах.
+Схема 8: methods.kind (тип способа: cash, card, bank, exchange, wallet, other). Способы оплаты - данные базы: в новой базе
+один способ «Наличные», остальные добавляет человек командой `python -m kassa_api.methods` (см. methods.py).
 
 Часовой пояс «дня» - переменная KASSA_TZ (имя IANA, по умолчанию UTC).
 """
@@ -34,7 +36,7 @@ LOCAL_TZ = _load_tz(os.environ.get("KASSA_TZ", "UTC"))
 # Разгон id для новых записей ТЕСТОВОЙ базы (файл *-test.db).
 TEST_ID_FLOOR = 100000
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA_V1 = """
 CREATE TABLE transactions (
@@ -79,15 +81,9 @@ FROM transactions WHERE status='active';
 """
 
 # scope: 'in' - способ поступления, 'out' - способ расхода, 'both' - для обоих направлений.
+# В новой базе только «Наличные»; остальные способы человек называет при установке (methods.py).
 METHODS_SEED = [
-    ("bybit", "Bybit", 10, "in"),
-    ("tinkoff", "Тинькофф", 20, "in"),
-    ("sber", "Сбер", 30, "in"),
-    ("redot", "Redot", 40, "in"),
-    ("kaspi", "Kaspi", 50, "in"),
-    ("cash", "Наличные", 60, "both"),
-    ("cold_wallet", "Холодный кошелёк", 70, "in"),
-    ("card", "Картой", 80, "out"),
+    ("cash", "Наличные", 10, "both"),
 ]
 
 
@@ -115,7 +111,8 @@ SELECT id, occurred_on AS date, direction, amount_cents/100.0 AS amount, currenc
        CASE WHEN source='kassa' THEN 'bot' ELSE source END AS source, created_at, method
 FROM transactions WHERE status='active' AND source <> 'month-close'""",
     # способ обязателен и у расхода: общие способы работают для обоих направлений, «Картой» заменён конкретными
-    "UPDATE methods SET scope='both' WHERE code IN ('bybit','tinkoff','sber','redot','kaspi')",
+    # (так в базах схемы 1: первые пять способов старого набора с sort до 50)
+    "UPDATE methods SET scope='both' WHERE scope='in' AND sort <= 50",
     "UPDATE methods SET active=0 WHERE code='card'",
 ]
 
@@ -217,11 +214,12 @@ SCHEMA_V7_STEPS = [
     "CREATE INDEX ix_tx_exchange ON transactions(exchange_id)",
 ]
 
-# Порядок способов на форме до накопления истории; дальше чипсы строятся по частоте за 90 дней.
-DEFAULT_METHOD_ORDER = {
-    "out": ["cash", "redot", "tinkoff", "kaspi", "bybit", "sber"],
-    "in": ["bybit", "tinkoff", "sber", "redot", "kaspi", "cash", "cold_wallet"],
-}
+# Схема 8. Тип способа нужен команде methods (--type) и подсказке при установке; на разбор денег не влияет.
+METHOD_KINDS = ("cash", "card", "bank", "exchange", "wallet", "other")
+SCHEMA_V8_STEPS = [
+    "ALTER TABLE methods ADD COLUMN kind TEXT NOT NULL DEFAULT 'other'",
+    "UPDATE methods SET kind='cash' WHERE code='cash'",
+]
 
 
 def now_utc_iso() -> str:
@@ -299,6 +297,11 @@ def _migrate_v7(conn) -> None:
         conn.execute(stmt)
 
 
+def _migrate_v8(conn) -> None:
+    for stmt in SCHEMA_V8_STEPS:
+        conn.execute(stmt)
+
+
 def init_db(path, env=os.environ) -> bool:
     """Создаёт/обновляет схему. Возвращает True для тестовой базы."""
     test = check_path_allowed(path, env)
@@ -325,7 +328,10 @@ def init_db(path, env=os.environ) -> bool:
                     _migrate_v5(conn)        # 0..4 -> 5
                 if version < 6:
                     _migrate_v6(conn)        # 0..5 -> 6
-                _migrate_v7(conn)            # 0..6 -> 7
+                if version < 7:
+                    _migrate_v7(conn)        # 0..6 -> 7
+                if version < 8:
+                    _migrate_v8(conn)        # 0..7 -> 8
                 conn.execute("PRAGMA user_version=%d" % SCHEMA_VERSION)
                 conn.execute("COMMIT")
             except BaseException:

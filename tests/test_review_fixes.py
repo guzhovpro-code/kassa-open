@@ -52,8 +52,8 @@ def err(conn, payload, now=NOW):
 
 # --- 1. идемпотентность: повтор сверяется целиком ------------------------------------------------------------
 @pytest.mark.parametrize("patch", [
-    {"category": "бар"}, {"note": "другая заметка"}, {"note": None}, {"method": "redot"}, {"date": "2026-10-13"},
-    {"currency": "USD"}, {"amount": "501"}, {"direction": "in", "method": "redot", "category": "доход"},
+    {"category": "бар"}, {"note": "другая заметка"}, {"note": None}, {"method": "monzo"}, {"date": "2026-10-13"},
+    {"currency": "USD"}, {"amount": "501"}, {"direction": "in", "method": "monzo", "category": "доход"},
 ])
 def test_idem_repeat_with_other_field_is_conflict(conn, patch):
     p = body(note="кофе")
@@ -64,7 +64,7 @@ def test_idem_repeat_with_other_field_is_conflict(conn, patch):
 
 
 def test_idem_repeat_same_everything_is_still_repeat(conn):
-    p = body(note="кофе", method="redot")
+    p = body(note="кофе", method="monzo")
     first = records.create_record(conn, ACTOR, p, now=NOW)
     again = records.create_record(conn, ACTOR, dict(p, confirm=["outlier"]), now=NOW + timedelta(minutes=30))
     assert again == {"ok": True, "id": first["id"], "duplicate_request": True, "category": "кафе"}
@@ -78,9 +78,9 @@ def test_idem_repeat_equal_after_whitespace_cleaning(conn):
 
 
 def test_idem_income_method_change_is_conflict(conn):
-    p = body(direction="in", category="доход", method="redot", currency="USD")
+    p = body(direction="in", category="доход", method="monzo", currency="USD")
     records.create_record(conn, ACTOR, p, now=NOW)
-    assert err(conn, dict(p, method="bybit")).code == "idem_conflict"
+    assert err(conn, dict(p, method="okx")).code == "idem_conflict"
     assert err(conn, dict(p, method=None, new_method="Мой банк")).code == "idem_conflict"
     assert count(conn) == 1
 
@@ -90,7 +90,7 @@ def test_idem_new_method_repeat_and_change(conn):
     first = records.create_record(conn, ACTOR, p, now=NOW)
     assert records.create_record(conn, ACTOR, dict(p, new_method="мой  БАНК"), now=NOW)["id"] == first["id"]
     assert err(conn, dict(p, new_method="Не мой банк")).code == "idem_conflict"
-    assert err(conn, dict(p, new_method=None, method="redot")).code == "idem_conflict"
+    assert err(conn, dict(p, new_method=None, method="monzo")).code == "idem_conflict"
     assert conn.execute("SELECT COUNT(*) FROM methods WHERE code LIKE 'x:%'").fetchone()[0] == 1
     assert count(conn) == 1
 

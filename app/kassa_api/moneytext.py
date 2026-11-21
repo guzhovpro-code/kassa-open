@@ -103,21 +103,59 @@ _UNIT_EXACT = {"м", "г", "л", "%", "ч", "мин."}
 # слова после числа, при которых «голое» число по смыслу ещё может быть суммой («20 на обед», «300 за такси»)
 _ALLOWED_NEXT = {"на", "за", "в", "во", "из", "от", "до", "для", "и", "а", "но", "да", "нет", "это", "как", "чтобы",
                  "потому", "там", "тут", "сегодня", "вчера", "позавчера", "утром", "днем", "вечером", "ночью",
-                 "наличными", "картой", "карте", "нал", "кэшем", "тинькофф", "тинькоф", "сбер", "сбербанк",
-                 "redot", "редот", "kaspi", "каспи", "bybit", "байбит", "бибит", "всего", "итого", "только",
+                 "наличными", "картой", "карте", "нал", "кэшем", "всего", "итого", "только",
                  "примерно", "около", "точно", "ну", "вот", "было", "было.", "ушло", "ушли", "вышло", "вышли"}
 
-METHOD_RULES = [
-    ("cash", re.compile(r"наличн|налом|\bнал\b|\bкэш|cash")),
-    ("tinkoff", re.compile(r"тинькоф|т-банк|тбанк|tinkoff")),
-    ("sber", re.compile(r"сбер")),
-    ("redot", re.compile(r"redot|редот")),
-    ("kaspi", re.compile(r"kaspi|каспи")),
-    ("bybit", re.compile(r"bybit|байбит|бибит")),
-    ("cold_wallet", re.compile(r"холодн\w* кошел")),
-]
-_METHOD_SCOPE = {"cash": "both", "tinkoff": "both", "sber": "both", "redot": "both", "kaspi": "both",
-                 "bybit": "both", "cold_wallet": "in"}
+# Способы человека - данные базы (таблица methods, команда kassa_api.methods), в коде нет ни одного названия.
+# Встроенное только слово «наличные» для способа с кодом cash.
+CASH_CODE = "cash"
+CASH_RULE = re.compile(r"наличн|налом|\bнал\b|\bкэш|cash")
+# слова названий, по которым один способ от другого не отличить: само по себе такое слово способ не выбирает
+_GENERIC_TITLE_WORDS = {"карта", "карту", "карты", "картой", "банк", "банка", "биржа", "биржи", "кошелек", "кошелька",
+                        "счет", "счета", "счету", "наличные", "наличными", "основной", "основная", "другой", "другая"}
+_WORD_RE = re.compile(r"[a-zа-я0-9]+")
+
+
+def _title_keys(title: str):
+    return [w for w in _WORD_RE.findall(norm(title)) if len(w) >= 3 and w not in _GENERIC_TITLE_WORDS]
+
+
+def method_spans(low: str, methods=None):
+    """Упоминания способов в тексте -> [(начало, конец, код, область)], без пересечений, длинные первыми.
+    methods - список способов человека [{code, title, scope}] (None: только «наличные»).
+    Правило: название целиком (без учёта регистра) или его отличительное слово («на карту Revolut» -> «Карта
+    Revolut»); слово, подходящее двум способам, не выбирает ни один."""
+    found = []                                              # (начало, конец, код, область)
+    by_code = {m["code"]: m for m in methods or []}
+    if methods is None or CASH_CODE in by_code:
+        scope = by_code[CASH_CODE]["scope"] if CASH_CODE in by_code else "both"
+        found += [(m.start(), m.end(), CASH_CODE, scope) for m in CASH_RULE.finditer(low)]
+    keyed = {}                                              # слово -> коды способов, которым оно отличительное
+    for m in methods or []:
+        title = norm(m["title"])
+        if not title or m["code"] == CASH_CODE:
+            continue
+        for hit in re.finditer(r"(?<![a-zа-я0-9])" + re.escape(title) + r"(?![a-zа-я0-9])", low):
+            found.append((hit.start(), hit.end(), m["code"], m["scope"]))
+        for key in _title_keys(m["title"]):
+            keyed.setdefault(key, set()).add(m["code"])
+    for hit in _WORD_RE.finditer(low):
+        word = hit.group(0)
+        owners = set()
+        for key, codes in keyed.items():
+            if word == key or (len(key) >= 5 and len(word) >= 5 and word.startswith(key[:-1])):
+                owners |= codes
+        if len(owners) == 1:
+            code = next(iter(owners))
+            found.append((hit.start(), hit.end(), code, by_code[code]["scope"]))
+    found.sort(key=lambda f: (-(f[1] - f[0]), f[0]))
+    taken, out = [], []
+    for f in found:
+        if all(f[1] <= t[0] or f[0] >= t[1] for t in taken):
+            taken.append(f)
+            out.append(f)
+    return sorted(out)
+
 
 _ISO_DATE = re.compile(r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)")
 _DMY_DATE = re.compile(r"(?<![\d.,])\d{1,2}\.\d{1,2}\.\d{2,4}(?![\d])")
@@ -515,12 +553,11 @@ def direction_of(text: str, default: str = "out") -> str:
     return default
 
 
-def method_of(low: str, direction: str):
-    for code, rx in METHOD_RULES:
-        if rx.search(low):
-            scope = _METHOD_SCOPE[code]
-            if scope in (direction, "both"):
-                return code
+def method_of(low: str, direction: str, methods=None):
+    """Способ из списка человека по тексту; не нашли - None («не выбран»)."""
+    for _, _, code, scope in sorted(method_spans(low, methods), key=lambda f: (-(f[1] - f[0]), f[0])):
+        if scope in (direction, "both"):
+            return code
     return None
 
 
@@ -533,7 +570,8 @@ def date_of(low: str, today: str) -> str:
     return today
 
 
-def parse(text, today: str, default_direction: str = "out", default_currency: str | None = None) -> dict:
+def parse(text, today: str, default_direction: str = "out", default_currency: str | None = None,
+          methods=None) -> dict:
     """Разбор фразы -> dict(direction, amount (строка), currency, currency_guess, note, date, method).
     Бросает Reject('no_amount'|'unsure_amount')."""
     raw = " ".join(str(text or "").split())
@@ -553,7 +591,7 @@ def parse(text, today: str, default_direction: str = "out", default_currency: st
         cur = default_currency
         guess = True
     return {"direction": direction, "amount": _fmt_amount(value), "currency": cur, "currency_guess": guess,
-            "note": raw[:200], "date": date_of(low, today), "method": method_of(low, direction)}
+            "note": raw[:200], "date": date_of(low, today), "method": method_of(low, direction, methods)}
 
 
 # --- детектор ---------------------------------------------------------------------------------------
@@ -595,10 +633,9 @@ def _verb_near(low: str, c, window: int = 40) -> bool:
 
 
 # слово из «безобидного хвоста» после суммы: способ оплаты, день, «с карты», «на двоих»
-_METHOD_ANY = re.compile("|".join("(?:%s)" % rx.pattern for _, rx in METHOD_RULES))
+_METHOD_ANY = CASH_RULE
 _TAIL_OK = {"сегодня", "вчера", "позавчера", "утром", "днем", "вечером", "ночью", "наличными", "наличкой", "картой",
-            "карте", "карты", "карту", "нал", "налом", "кэшем", "тинькофф", "тинькоф", "сбер", "сбербанк", "redot",
-            "редот", "kaspi", "каспи", "bybit", "байбит", "бибит", "с", "со", "на", "за", "итого", "всего"}
+            "карте", "карты", "карту", "нал", "налом", "кэшем", "с", "со", "на", "за", "итого", "всего"}
 _PAIR_PREV_NOT = {"на", "за", "по"}
 _SLANG_WORDS = re.compile(r"(?<![а-я])(?:косар\w*|лям\w*|полтин\w*|полтос\w*|сотк\w*|штуку)(?![а-я])")
 SHORT_WORDS = 8                 # короткая строка без глагола: до стольких слов

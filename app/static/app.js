@@ -1172,11 +1172,11 @@
   }
 
   function loadInbox(quiet) {
-    var list = $("inbox-list"), bb = $("inbox-bybit");
+    var list = $("inbox-list");
     return api("api/inbox").then(function (res) {
       if (res.status !== 200) {
         if (!quiet) {
-          clear(list); clear(bb);
+          clear(list);
           list.appendChild(el("li", "rec empty", res.status === 401 ? "Откройте Кассу заново." :
             res.status === 403 ? "Нет доступа." : "Не удалось загрузить. Попробуйте ещё раз."));
         }
@@ -1184,7 +1184,7 @@
       }
       var b = res.body;
       setInboxCount(b.drafts.length);
-      clear(list); clear(bb);
+      clear(list);
       if (!b.drafts.length) { list.appendChild(el("li", "rec empty", "Пока пусто")); }
       b.drafts.forEach(function (d) { list.appendChild(draftRow(d)); });
     }).catch(function () {

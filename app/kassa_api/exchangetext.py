@@ -126,7 +126,7 @@ class _Spans:
         return True
 
 
-def _skeleton(low: str):
+def _skeleton(low: str, methods=None):
     """Текст -> (скелет с метками §V §A §N §W §F §Z §P §M §D, участки) или None (глаголов не один)."""
     verbs = list(_VERB.finditer(low))
     if len(verbs) != 1:
@@ -167,16 +167,15 @@ def _skeleton(low: str):
         s, e = _span(low, c)
         sp.add(s, e, "A" if c["cur"] else "N", (c["value"], c["cur"]))
 
-    for code, rx in moneytext.METHOD_RULES:
-        for m in rx.finditer(low):
-            end = _WORD_TAIL.match(low, m.end()).end()          # правило даёт основу («тинькоф»), берём слово целиком
-            if not sp.free(m.start(), end):
-                continue
-            s, prefix = m.start(), ""
-            p = _METHOD_PREFIX.search(low[:s])
-            if p and sp.free(p.start(), s):
-                s, prefix = p.start(), p.group(1)
-            sp.add(s, end, "M", (code, prefix))
+    for m_start, m_end, code, _ in moneytext.method_spans(low, methods):
+        end = _WORD_TAIL.match(low, m_end).end()                # правило даёт основу («налич»), берём слово целиком
+        if not sp.free(m_start, end):
+            continue
+        s, prefix = m_start, ""
+        p = _METHOD_PREFIX.search(low[:s])
+        if p and sp.free(p.start(), s):
+            s, prefix = p.start(), p.group(1)
+        sp.add(s, end, "M", (code, prefix))
 
     for m in _DATE.finditer(low):
         sp.add(m.start(), m.end(), "D")
@@ -196,12 +195,12 @@ def _skeleton(low: str):
     return re.sub(r"[.!;,\s]+$", "", text), sorted(sp.items)
 
 
-def parse(text, today: str):
+def parse(text, today: str, methods=None):
     raw = " ".join(str(text or "").split())
     low = moneytext.norm(raw)
     if not low or not _VERB.search(low):
         return None
-    sk = _skeleton(low)
+    sk = _skeleton(low, methods)
     if sk is None:
         return None
     skeleton, items = sk
@@ -231,7 +230,7 @@ def parse(text, today: str):
     if give_cur in get_curs or len(set(get_curs)) != len(get_curs):
         raise ExchangeReject()                               # одна валюта с двух сторон или дважды в получении
 
-    # способы: «с тинькофф» - отдача; прочие до первой получаемой суммы - отдача, после - ближайшей получаемой
+    # способы: «с карты Revolut» - отдача; прочие до первой получаемой суммы - отдача, после - ближайшей получаемой
     give_method, get_methods = None, [None] * len(gets)
     first_get = gets[0][0] if kind != "buy" else ordered[0][0]
     for s, e, t, d in items:

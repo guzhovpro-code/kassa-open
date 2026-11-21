@@ -19,7 +19,7 @@ def test_day_report_has_expense_categories_with_sum_equal_to_total(conn):
     add(conn, "out", 4000, "TRY", usd=100, category="кафе")
     add(conn, "out", 5000, "TRY", usd=125, category="такси")
     add(conn, "out", 9000, "TRY", usd=None, category="бар")                    # без курса: в сумму не входит
-    add(conn, "in", 70000, "USD", usd=70000, category="доход", method="bybit")  # поступления в расходы не попадают
+    add(conn, "in", 70000, "USD", usd=70000, category="доход", method="okx")  # поступления в расходы не попадают
     add(conn, "out", 2000, "USD", usd=2000, category="жильё", status="cancelled")      # удалённая не считается
     rep = reports.report(conn, "day", None, "2026-10-14")
     names = {g["name"]: g for g in rep["by_category"]}
@@ -34,7 +34,7 @@ def test_day_report_has_expense_categories_with_sum_equal_to_total(conn):
 
 def test_trend_open_month_counts_only_active_records(conn):
     add(conn, "out", 1000, "USD", usd=1000, day="2026-10-02")
-    add(conn, "in", 5000, "USD", usd=5000, day="2026-10-03", category="доход", method="bybit")
+    add(conn, "in", 5000, "USD", usd=5000, day="2026-10-03", category="доход", method="okx")
     add(conn, "out", 7000, "USD", usd=7000, day="2026-10-04", status="cancelled")
     add(conn, "out", 300, "BTC", usd=None, day="2026-10-05")
     tr = reports.trend(conn, "2026-10-14")

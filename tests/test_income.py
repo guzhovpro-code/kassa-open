@@ -32,7 +32,7 @@ def conn(path):
     c.close()
 
 
-def add(conn, day=TODAY, direction="in", amount="100", currency="USDT", method="bybit", **kw):
+def add(conn, day=TODAY, direction="in", amount="100", currency="USDT", method="okx", **kw):
     _n[0] += 1
     body = {"direction": direction, "amount": amount, "currency": currency, "date": day, "method": method,
             "client_id": "inc-%016d" % _n[0], "confirm": ["possible_duplicate", "outlier"]}
@@ -49,7 +49,7 @@ def fill(conn):
     add(conn, "2026-10-21", amount="50", payer="Клиент Два", segment="b2b")
     add(conn, "2026-10-25", amount="30", payer="Клиент Один", segment="b2c")
     add(conn, "2026-10-22", amount="20")
-    add(conn, "2026-10-23", amount="500", currency="TRY", method="tinkoff", note="кто-то из TRY")
+    add(conn, "2026-10-23", amount="500", currency="TRY", method="revolut", note="кто-то из TRY")
     add(conn, "2026-10-18", amount="7777")                       # воскресенье прошлой недели
     add(conn, "2026-10-26", amount="8888")                       # понедельник следующей недели
     add(conn, "2026-10-20", direction="out", amount="999")
@@ -160,10 +160,10 @@ def test_month_matches_report_month(conn):
 def test_closed_month_uses_the_same_rows_as_report(conn):
     """Закрытый месяц: записи импорта перекрыты (closed_by), считаются строки закрытия - как в reports.report."""
     conn.execute("INSERT INTO transactions(idem_key, direction, amount_cents, currency, usd_cents, method, occurred_on, "
-                 "created_at, source, via, actor_id) VALUES ('close:2026-09:1','in',90000,'USD',90000,'bybit','2026-09-30',"
+                 "created_at, source, via, actor_id) VALUES ('close:2026-09:1','in',90000,'USD',90000,'okx','2026-09-30',"
                  "'2026-10-14T23:00:00Z','month-close','close-import','month-close')")
     conn.execute("INSERT INTO transactions(idem_key, direction, amount_cents, currency, usd_cents, method, occurred_on, "
-                 "created_at, source, via, actor_id, closed_by) VALUES ('fb:1','in',99999,'USD',99999,'bybit','2026-09-10',"
+                 "created_at, source, via, actor_id, closed_by) VALUES ('fb:1','in',99999,'USD',99999,'okx','2026-09-10',"
                  "'2026-09-10T10:00:00Z','finbot','import','finbot','2026-09')")
     rep = reports.report(conn, "month", "2026-09", TODAY)
     r = reports.income(conn, "month", "2026-09", TODAY)

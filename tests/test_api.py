@@ -91,7 +91,7 @@ def test_meta_requires_auth(env):
     assert req(port, "GET", f"/{TOKEN}/api/meta")[0] == 401
     assert req(port, "GET", f"/{TOKEN}/api/meta", init=make_init_data(PRIV, user_id=STRANGER))[0] == 403
     status, body = req(port, "GET", f"/{TOKEN}/api/meta", init=make_init_data(PRIV))
-    assert status == 200 and body["test"] is True and len(body["methods"]) == len(db.METHODS_SEED) - 1     # «Картой» снят (схема 2)
+    assert status == 200 and body["test"] is True and len(body["methods"]) == len(db.METHODS_SEED)
     assert str(OWNER) not in json.dumps(body)
 
 

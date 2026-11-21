@@ -55,7 +55,7 @@ def test_day_report_totals_per_currency_and_usd(conn):
     add(conn, "out", 10000, "TRY", usd=300)
     add(conn, "out", 2550, "TRY", usd=75)
     add(conn, "out", 1000, "USD", usd=1000)
-    add(conn, "in", 50000, "USDT", usd=50000, method="bybit", category="доход")
+    add(conn, "in", 50000, "USDT", usd=50000, method="okx", category="доход")
     add(conn, "in", 7000, "TRY", usd=None, method="cash", category="доход")           # без курса
     rep = reports.report(conn, "day", None, TODAY)
     c = by_cur(rep)
@@ -89,11 +89,11 @@ def test_day_report_empty(conn):
 
 
 def test_day_records_carry_method_title_and_order(conn):
-    a = add(conn, "in", 100, "USD", method="bybit", category="доход", created="2026-10-14T08:00:00Z")
+    a = add(conn, "in", 100, "USD", method="okx", category="доход", created="2026-10-14T08:00:00Z")
     b = add(conn, "out", 200, "TRY", created="2026-10-14T09:00:00Z")
     rep = reports.report(conn, "day", None, TODAY)
     assert [r["id"] for r in rep["records"]] == [b, a]                       # свежие сверху
-    assert rep["records"][1]["method_title"] == "Bybit" and rep["records"][0]["method_title"] is None
+    assert rep["records"][1]["method_title"] == "Биржа OKX" and rep["records"][0]["method_title"] is None
 
 
 def test_refund_recorded_as_negative_expense_reduces_total(conn):
@@ -132,18 +132,18 @@ def test_month_by_category_and_method(conn):
     add(conn, "out", 500, "TRY", category="кафе", usd=15)
     add(conn, "out", 200, "USD", category="кафе", usd=200)
     add(conn, "out", 9999, "TRY", category="бар", usd=None)
-    add(conn, "in", 70000, "USDT", category="доход", method="bybit", usd=70000)
+    add(conn, "in", 70000, "USDT", category="доход", method="okx", usd=70000)
     add(conn, "in", 5000, "RUB", category="доход", method=None, usd=60)
-    add(conn, "in", 1000, "RUB", category="доход", method="tinkoff", usd=12)
+    add(conn, "in", 1000, "RUB", category="доход", method="revolut", usd=12)
     rep = reports.report(conn, "month", "2026-10", TODAY)
     cats = {g["name"]: g for g in rep["by_category"]}
     assert cats["кафе"]["count"] == 3 and cats["кафе"]["usd_cents"] == 245 and cats["кафе"]["without_usd"] == 0
     assert cats["кафе"]["currencies"] == [{"currency": "TRY", "cents": 1500}, {"currency": "USD", "cents": 200}]
     assert cats["бар"]["without_usd"] == 1 and cats["бар"]["usd_cents"] == 0
     methods = {g["name"]: g for g in rep["by_method"]}
-    assert set(methods) == {"Bybit", "Тинькофф", "без способа"}
+    assert set(methods) == {"Биржа OKX", "Карта Revolut", "без способа"}
     assert methods["без способа"]["currencies"] == [{"currency": "RUB", "cents": 5000}]
-    assert [g["name"] for g in rep["by_method"]] == ["Bybit", "без способа", "Тинькофф"]    # по USD, затем по числу
+    assert [g["name"] for g in rep["by_method"]] == ["Биржа OKX", "без способа", "Карта Revolut"]    # по USD, затем по числу
     assert "records" not in rep                                                              # у месяца нет списка
 
 
@@ -175,7 +175,7 @@ def test_report_matches_independent_sql_on_random_data(conn):
             rnd.choice(["TRY", "USD", "USDT", "RUB", "EUR", "KZT"]),
             day="2026-10-%02d" % rnd.randint(1, 14) if rnd.random() < .8 else "2026-09-%02d" % rnd.randint(1, 30),
             usd=rnd.choice([None, 0, 100, 3333, -50]), status=rnd.choice(["active"] * 4 + ["cancelled"]),
-            category=rnd.choice(["кафе", "бар", "доход"]), method=rnd.choice([None, "bybit", "cash"]))
+            category=rnd.choice(["кафе", "бар", "доход"]), method=rnd.choice([None, "okx", "cash"]))
     for period, key, first, last in (("month", "2026-10", "2026-10-01", "2026-10-31"),
                                      ("month", "2026-09", "2026-09-01", "2026-09-30")) + tuple(
             ("day", "2026-10-%02d" % d, "2026-10-%02d" % d, "2026-10-%02d" % d) for d in range(1, 15)):
@@ -280,7 +280,7 @@ def test_restore_active_record_is_noop(conn):
 
 
 def test_cancel_restore_cycle_keeps_all_money_fields(conn):
-    rid = add(conn, "in", 12345, "USDT", usd=12345, method="bybit", category="доход", note="n")
+    rid = add(conn, "in", 12345, "USDT", usd=12345, method="okx", category="доход", note="n")
     before = dict(conn.execute("SELECT * FROM transactions WHERE id=?", (rid,)).fetchone())
     records.cancel_record(conn, ACTOR, rid, now=NOW)
     records.restore_record(conn, ACTOR, rid, now=NOW)
@@ -307,8 +307,8 @@ def test_update_category_writes_audit_and_keeps_amount_and_currency(conn):
 
 def test_update_method_income(conn):
     rid = add(conn, "in", 500, "USD", category="доход", method=None)
-    records.update_record(conn, ACTOR, rid, {"method": "sber"}, now=NOW)
-    assert snapshot(conn, rid)["method"] == "sber"
+    records.update_record(conn, ACTOR, rid, {"method": "wise"}, now=NOW)
+    assert snapshot(conn, rid)["method"] == "wise"
     records.update_record(conn, ACTOR, rid, {"new_method": "Мой банк"}, now=NOW)
     code = snapshot(conn, rid)["method"]
     assert code == "x:мой банк" and conn.execute("SELECT title FROM methods WHERE code=?", (code,)).fetchone()[0] == "Мой банк"
@@ -316,9 +316,9 @@ def test_update_method_income(conn):
 
 
 def test_update_method_cannot_be_cleared_for_income_or_expense(conn):
-    inc = add(conn, "in", 500, category="доход", method="bybit")
-    exp = add(conn, "out", 500, method="redot")
-    for rid, was in ((inc, "bybit"), (exp, "redot")):
+    inc = add(conn, "in", 500, category="доход", method="okx")
+    exp = add(conn, "out", 500, method="monzo")
+    for rid, was in ((inc, "okx"), (exp, "monzo")):
         for bad in ({"method": None}, {"method": ""}):
             with pytest.raises(RecordError) as e:
                 records.update_record(conn, ACTOR, rid, bad, now=NOW)
@@ -329,14 +329,14 @@ def test_legacy_expense_without_method_can_be_edited_and_gets_a_method(conn):
     old = add(conn, "out", 500, method=None, category="прочее")          # импорт: способ пуст, это допустимо
     records.update_record(conn, ACTOR, old, {"category": "кафе"}, now=NOW)
     assert snapshot(conn, old)["method"] is None
-    records.update_record(conn, ACTOR, old, {"method": "kaspi"}, now=NOW)
-    assert snapshot(conn, old)["method"] == "kaspi"
+    records.update_record(conn, ACTOR, old, {"method": "n26"}, now=NOW)
+    assert snapshot(conn, old)["method"] == "n26"
 
 
 def test_update_method_scope_is_checked(conn):
     exp = add(conn, "out")
     inc = add(conn, "in", category="доход", method="cash")
-    for rid, method, code in ((exp, "cold_wallet", "unknown_method"), (exp, "card", "unknown_method"),
+    for rid, method, code in ((exp, "ledger", "unknown_method"), (exp, "card", "unknown_method"),
                               (inc, "card", "unknown_method"), (inc, "nope", "unknown_method")):
         with pytest.raises(RecordError) as e:
             records.update_record(conn, ACTOR, rid, {"method": method}, now=NOW)

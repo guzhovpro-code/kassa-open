@@ -5,6 +5,7 @@
 срабатывания (спецификация разд. 8: цена одного тапа ниже цены пропущенной суммы)."""
 import pytest
 
+from helpers import METHODS
 from kassa_api import moneytext as mt
 
 TODAY = "2026-10-15"
@@ -123,15 +124,15 @@ CASES = [
     ('потратил около 500 лир', True, ('out', '500', 'TRY', None)),
     ('потратил примерно 500 лир', True, ('out', '500', 'TRY', None)),
     ('потратил 500 лир наличными', True, ('out', '500', 'TRY', 'cash')),
-    ('потратил 500 лир картой тинькофф', True, ('out', '500', 'TRY', 'tinkoff')),
-    ('получил 100 долларов на bybit', True, ('in', '100', 'USD', 'bybit')),
-    ('пришло 100 usdt на холодный кошелек', True, ('in', '100', 'USDT', 'cold_wallet')),
+    ('потратил 500 лир картой revolut', True, ('out', '500', 'TRY', 'revolut')),
+    ('получил 100 долларов на okx', True, ('in', '100', 'USD', 'okx')),
+    ('пришло 100 usdt на кошелек ledger', True, ('in', '100', 'USDT', 'ledger')),
 ]
 
 
 def _parse(text):
     try:
-        r = mt.parse(text, TODAY, "out", "TRY")
+        r = mt.parse(text, TODAY, "out", "TRY", METHODS)
         return (r["direction"], r["amount"], r["currency"], r["method"])
     except mt.Reject as exc:
         return exc.code

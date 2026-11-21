@@ -155,7 +155,7 @@ def test_expense_screen_shows_date_and_method_without_expanding(page, server):
     labels = page.evaluate(VISIBLE_BUTTONS)
     assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Период", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
                       "TRY", "USDT", "USD", "RUB", "Ещё ▾"] + DATE_BUTTONS + \
-        ["Наличные", "Redot", "Тинькофф", "Ещё ▾"]
+        ["Наличные", "Карта Monzo", "Карта Revolut", "Ещё ▾"]
     assert page.locator("#date").is_visible() and page.locator("#method").is_visible()     # ничего не раскрывать
     assert page.locator("#date button.on").inner_text() == "Сегодня"                      # по умолчанию сегодня
     assert page.locator("#date-label").inner_text() == "Дата: " + dayword(TODAY)
@@ -174,7 +174,7 @@ def test_dates_are_exactly_three_and_other_date_opens_the_picker(page, server):
     assert page.locator("#date-pick").is_visible() and page.locator("#date button.on").inner_text() == "Другая дата"
     page.fill("#date-pick", (date.fromisoformat(TODAY) - timedelta(days=5)).isoformat())
     page.locator("#date-pick").dispatch_event("change")
-    btn(page, "method", "Redot").click()
+    btn(page, "method", "Карта Monzo").click()
     page.fill("#amount", "9")
     press(page)
     page.wait_for_selector("#ok:not([hidden])")
@@ -184,12 +184,12 @@ def test_dates_are_exactly_three_and_other_date_opens_the_picker(page, server):
 def test_three_method_chips_plus_more_and_the_rest_under_more(page, server):
     port, _ = server
     open_app(page, port, method=None)
-    assert page.locator("#method button").all_inner_texts() == ["Наличные", "Redot", "Тинькофф", "Ещё ▾"]
+    assert page.locator("#method button").all_inner_texts() == ["Наличные", "Карта Monzo", "Карта Revolut", "Ещё ▾"]
     btn(page, "method", "Ещё ▾").click()
     opts = page.locator("#method-select option").all_inner_texts()
-    assert {"Kaspi", "Bybit", "Сбер", "Другой…"} <= set(opts)                     # остальные и «Другой» под «Ещё»
-    page.select_option("#method-select", "kaspi")
-    assert page.locator("#method button.on").inner_text() == "Kaspi"            # выбранный из «Ещё» остаётся видимым
+    assert {"Карта N26", "Биржа OKX", "Карта Wise", "Другой…"} <= set(opts)                     # остальные и «Другой» под «Ещё»
+    page.select_option("#method-select", "n26")
+    assert page.locator("#method button.on").inner_text() == "Карта N26"            # выбранный из «Ещё» остаётся видимым
     assert main_button(page)["is_active"] is True
 
 
@@ -203,12 +203,12 @@ def test_record_button_is_inactive_until_a_method_is_chosen_for_expense(page, se
     press(page)                          # нажатие неактивной кнопки библиотека Telegram не пропускает: записи нет
     page.wait_for_timeout(400)
     assert page.locator("#ok").is_hidden() and total(path) == before
-    btn(page, "method", "Redot").click()
+    btn(page, "method", "Карта Monzo").click()
     assert main_button(page)["is_active"] is True and page.locator("#method-hint").is_hidden()
-    assert page.locator("#method button.on").inner_text() == "Redot"
+    assert page.locator("#method button.on").inner_text() == "Карта Monzo"
     press(page)
     page.wait_for_selector("#ok:not([hidden])")
-    assert last_row(path)["method"] == "redot" and total(path) == before + 1
+    assert last_row(path)["method"] == "monzo" and total(path) == before + 1
 
 
 def test_date_and_method_change_with_one_tap_and_method_is_remembered(page, server):
@@ -217,17 +217,17 @@ def test_date_and_method_change_with_one_tap_and_method_is_remembered(page, serv
     btn(page, "date", "Вчера").click()
     yesterday = (date.fromisoformat(TODAY) - timedelta(days=1)).isoformat()
     assert page.locator("#date-label").inner_text() == "Дата: " + dayword(yesterday)
-    btn(page, "method", "Redot").click()
+    btn(page, "method", "Карта Monzo").click()
     page.fill("#amount", "12")
     press(page)
     page.wait_for_selector("#ok:not([hidden])")
     r = last_row(path)
-    assert r["method"] == "redot" and r["occurred_on"] == yesterday
+    assert r["method"] == "monzo" and r["occurred_on"] == yesterday
     assert page.locator("#date button.on").inner_text() == "Сегодня"                      # дата вернулась на сегодня
-    assert page.locator("#method button.on").inner_text() == "Redot"                      # способ остался
+    assert page.locator("#method button.on").inner_text() == "Карта Monzo"                      # способ остался
     # новое открытие формы: последний выбранный способ подставляет сервер
     open_app(page, port, method=None)
-    assert page.locator("#method button.on").inner_text() == "Redot"
+    assert page.locator("#method button.on").inner_text() == "Карта Monzo"
     assert main_button(page)["is_active"] is True and page.locator("#method-hint").is_hidden()
 
 
@@ -236,9 +236,9 @@ def test_more_opens_full_method_list_with_other_for_expense_too(page, server):
     open_app(page, port, method=None)
     btn(page, "method", "Ещё ▾").click()
     assert page.locator("#method-select option").all_inner_texts() == \
-        ["Выберите способ", "Наличные", "Redot", "Тинькофф", "Kaspi", "Bybit", "Сбер", "Другой…"]
-    page.select_option("#method-select", "sber")                                        # из списка: появляется чипсом
-    assert page.locator("#method button.on").inner_text() == "Сбер" and page.locator("#method-panel").is_hidden()
+        ["Выберите способ", "Наличные", "Карта Monzo", "Карта Revolut", "Карта N26", "Биржа OKX", "Карта Wise", "Другой…"]
+    page.select_option("#method-select", "wise")                                        # из списка: появляется чипсом
+    assert page.locator("#method button.on").inner_text() == "Карта Wise" and page.locator("#method-panel").is_hidden()
     btn(page, "method", "Ещё ▾").click()
     page.select_option("#method-select", "__other")
     page.fill("#method-other", "Карта друга")
@@ -256,14 +256,14 @@ def test_more_opens_full_method_list_with_other_for_expense_too(page, server):
 def test_method_is_remembered_per_direction(page, server):
     port, _ = server
     open_app(page, port, method=None)
-    btn(page, "method", "Redot").click()
+    btn(page, "method", "Карта Monzo").click()
     btn(page, "direction", "Поступление").click()
     assert page.locator("#method button.on").count() == 0 and main_button(page)["is_active"] is False
-    btn(page, "method", "Тинькофф").click()
+    btn(page, "method", "Карта Revolut").click()
     btn(page, "direction", "Расход").click()
-    assert page.locator("#method button.on").inner_text() == "Redot"
+    assert page.locator("#method button.on").inner_text() == "Карта Monzo"
     btn(page, "direction", "Поступление").click()
-    assert page.locator("#method button.on").inner_text() == "Тинькофф"
+    assert page.locator("#method button.on").inner_text() == "Карта Revolut"
 
 
 def test_closed_month_date_blocks_the_record_button(page, server):
@@ -294,7 +294,7 @@ def test_income_without_method_shows_chips_and_hint(page, server):
     assert page.locator("#date").is_visible() and page.locator("#method").is_visible()
     labels = page.evaluate(VISIBLE_BUTTONS)
     assert labels == ["Запись", "Входящие", "Сегодня", "Месяц", "Период", "Последние", "Обмены", "Расход", "Поступление", "Обмен", "🎙 Надиктовать",
-                      "TRY", "USDT", "USD", "RUB", "Ещё ▾"] + DATE_BUTTONS + ["Bybit", "Тинькофф", "Сбер", "Ещё ▾"] + ["B2B", "B2C"]
+                      "TRY", "USDT", "USD", "RUB", "Ещё ▾"] + DATE_BUTTONS + ["Наличные", "Карта Monzo", "Карта Revolut", "Ещё ▾"] + ["B2B", "B2C"]
     assert page.locator("#method-hint").is_visible()
 
 

@@ -1,13 +1,14 @@
 """Этап 4 (бот): разбор денежных фраз и детектор «похоже на деньги» (moneytext.py)."""
 import pytest
 
+from helpers import METHODS
 from kassa_api import moneytext as mt
 
 TODAY = "2026-10-15"
 
 
 def p(text, **kw):
-    return mt.parse(text, TODAY, **kw)
+    return mt.parse(text, TODAY, methods=METHODS, **kw)
 
 
 # --- детектор: должны ловиться -------------------------------------------------------------------------------
@@ -217,10 +218,10 @@ def test_parse_currency_default_and_symbol():
 
 def test_parse_method_words():
     assert p("потратил 20 лир наличными")["method"] == "cash"
-    assert p("оплатил 300 лир с тинькофф")["method"] == "tinkoff"
-    assert p("потратил 20 лир редот")["method"] == "redot"
-    assert p("получил 100 usdt на bybit", default_direction="in")["method"] == "bybit"
-    assert p("потратил 20 лир на холодный кошелёк")["method"] is None            # такой способ только у поступлений
+    assert p("оплатил 300 лир с revolut")["method"] == "revolut"
+    assert p("потратил 20 лир monzo")["method"] == "monzo"
+    assert p("получил 100 usdt на okx", default_direction="in")["method"] == "okx"
+    assert p("потратил 20 лир на кошелёк ledger")["method"] is None            # такой способ только у поступлений
 
 
 def test_parse_never_returns_float_or_negative():

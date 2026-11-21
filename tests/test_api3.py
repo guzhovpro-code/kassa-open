@@ -98,7 +98,7 @@ def test_actions_not_reachable_without_secret_prefix(env):
 def test_report_day_and_month_over_http(env):
     port, _ = env
     add(port, amount="1234,50", note="для теста")
-    add(port, amount="10", currency="USD", direction="in", category="доход", method="bybit")
+    add(port, amount="10", currency="USD", direction="in", category="доход", method="okx")
     s, day = call(port, "GET", "api/report")
     assert s == 200 and day["period"] == "day" and day["from"] == TODAY and day["count"] == 2
     cur = {c["currency"]: c for c in day["currencies"]}
@@ -106,7 +106,7 @@ def test_report_day_and_month_over_http(env):
     assert {r["amount_cents"] for r in day["records"]} == {123450, 1000}
     s, month = call(port, "GET", "api/report?period=month")
     assert s == 200 and month["period"] == "month" and month["from"] == TODAY[:7] + "-01"
-    assert [g["name"] for g in month["by_method"]] == ["Bybit"]
+    assert [g["name"] for g in month["by_method"]] == ["Биржа OKX"]
     s, month2 = call(port, "GET", "api/report?period=month&month=" + TODAY[:7])
     assert month2 == month
 
@@ -157,11 +157,11 @@ def test_cancel_restore_over_http(env):
 
 def test_update_over_http(env):
     port, path = env
-    rid = add(port, direction="in", category="доход", method="redot", currency="USD", amount="40")
-    s, out = call(port, "POST", "api/records/%d/update" % rid, {"category": "возврат", "method": "sber"})
+    rid = add(port, direction="in", category="доход", method="monzo", currency="USD", amount="40")
+    s, out = call(port, "POST", "api/records/%d/update" % rid, {"category": "возврат", "method": "wise"})
     assert s == 200 and out["changed"] == ["category", "method"]
     assert (out["record"]["category"], out["record"]["method"], out["record"]["amount_cents"],
-            out["record"]["currency"]) == ("возврат", "sber", 4000, "USD")
+            out["record"]["currency"]) == ("возврат", "wise", 4000, "USD")
     s, out = call(port, "POST", "api/records/%d/update" % rid, {"date": "2026-10-01"})
     assert (s, out["error"]) == (422, "field_not_editable")
     s, out = call(port, "POST", "api/records/%d/update" % rid, {"method": None})

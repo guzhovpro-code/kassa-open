@@ -56,3 +56,17 @@ def freeze_local(monkeypatch, local_text):
     for module in (db, records, cards):
         monkeypatch.setattr(module, "datetime", Frozen)
     return fixed
+
+
+# Выдуманный набор способов для тестов (способы - данные базы, в коде их нет; conftest кладёт его в каждую новую базу).
+# Порядок и sort задают порядок на форме; ledger - только для поступлений.
+TEST_METHODS_SEED = [
+    ("cash", "Наличные", 10, "both"),
+    ("monzo", "Карта Monzo", 20, "both"),
+    ("revolut", "Карта Revolut", 30, "both"),
+    ("n26", "Карта N26", 40, "both"),
+    ("okx", "Биржа OKX", 50, "both"),
+    ("wise", "Карта Wise", 60, "both"),
+    ("ledger", "Кошелёк Ledger", 70, "in"),
+]
+METHODS = [{"code": c, "title": t, "scope": sc} for c, t, _, sc in TEST_METHODS_SEED]

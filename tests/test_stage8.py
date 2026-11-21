@@ -152,7 +152,7 @@ def test_drafts_expire_after_a_day_and_chat_message_is_edited(conn):
 # --- токен бота: только отмена черновика ------------------------------------------------------------------------------
 def test_act_accepts_only_cancel_actions_and_answers_without_card_text(conn):
     cid = make(conn, "потратил 777 лир на секретное")["card_id"]
-    for action in ("ok", "m", "more", "flip", "undo", "redo", "bybit", "что-угодно"):
+    for action in ("ok", "m", "more", "flip", "undo", "redo", "okx", "что-угодно"):
         res = act(conn, cid, action, "cash")
         assert res["edit"] is None and "устарела" in res["answer"]
         assert "777" not in json.dumps(res, ensure_ascii=False) and "секретн" not in json.dumps(res, ensure_ascii=False)
@@ -439,7 +439,7 @@ def test_token_cannot_write_cancel_or_read_anything(srv):
     cid = b["card_id"]
     assert st == 200 and "777" in b["text"]                 # текст видит тот, кто сам прислал фразу
     # 1. подтвердить запись нельзя ни одним действием
-    for action in ("ok", "m", "more", "flip", "undo", "redo", "bybit", "confirm", "write"):
+    for action in ("ok", "m", "more", "flip", "undo", "redo", "okx", "confirm", "write"):
         st, out = ireq(srv, "POST", "/internal/card-action",
                        {"user_id": OWNER, "action": action, "card_id": cid, "value": "cash"})
         assert st == 200 and "устарела" in out["answer"] and out["edit"] is None

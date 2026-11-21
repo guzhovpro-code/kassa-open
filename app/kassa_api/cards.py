@@ -383,15 +383,16 @@ def create_from_text(conn: sqlite3.Connection, actor_id, chat_id, source: str, t
     expire_old(conn, now)
     last = {"out": _last_currency(conn, "out"), "in": _last_currency(conn, "in")}
     direction_default = default_direction if default_direction in ("in", "out") else "out"
+    methods = [dict(r) for r in conn.execute("SELECT code, title, scope FROM methods WHERE active=1")]
     try:
-        exchange = exchangetext.parse(text, today)      # сначала обмен; не обмен - обычный разбор денег без изменений
+        exchange = exchangetext.parse(text, today, methods)      # сначала обмен; не обмен - обычный разбор денег без изменений
     except exchangetext.ExchangeReject as exc:
         return {"ok": False, "reject": exc.code, "reply": REJECT_TEXT[exc.code]}
     if exchange is not None:
         draft = _exchange_draft(conn, exchange)
     else:
         try:
-            parsed = moneytext.parse(text, today, direction_default, last[direction_default])
+            parsed = moneytext.parse(text, today, direction_default, last[direction_default], methods)
         except moneytext.Reject as exc:
             return {"ok": False, "reject": exc.code, "reply": REJECT_TEXT["several" if exc.several else exc.code]}
         if parsed["currency"] is None or parsed["currency_guess"]:

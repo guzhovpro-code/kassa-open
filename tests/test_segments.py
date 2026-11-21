@@ -35,11 +35,11 @@ def conn(path):
 _n = [0]
 
 
-def add(conn, direction="in", amount="100", currency="USDT", method="bybit", **kw):
+def add(conn, direction="in", amount="100", currency="USDT", method="okx", **kw):
     _n[0] += 1
     body = {"direction": direction, "amount": amount, "currency": currency, "date": TODAY, "method": method,
             "client_id": "seg-%016d" % _n[0], "confirm": ["possible_duplicate", "outlier"]}
-    if direction == "out" and method == "bybit":
+    if direction == "out" and method == "okx":
         body["method"] = "cash"
     body.update(kw)
     return records.create_record(conn, OWNER, body, now=NOW, fx_rates={})
@@ -251,8 +251,7 @@ def make_v5(path):
                   "occurred_on, created_at, source, via, actor_id) VALUES (?,?,?,?,?,?,?,?, '2026-10-0%d', "
                   "'2026-10-0%dT00:00:00Z','kassa','webapp','1')" % (i, i),
                   ("old-%d" % i, d, 1000 * i, cur, 500 * i, "доход" if d == "in" else "кафе", "заметка %d" % i,
-                   "bybit" if d == "in" else "cash"))
-    c.execute("INSERT INTO bybit_seen(tx_id, first_seen, amount, coin, kind, status) VALUES ('t','x','1','USDT','internal','2')")
+                   "okx" if d == "in" else "cash"))
     c.close()
 
 
@@ -277,7 +276,7 @@ def test_newer_database_is_refused(tmp_path):
     p = str(tmp_path / "future-test.db")
     db.init_db(p)
     c = db.connect(p)
-    c.execute("PRAGMA user_version=8")
+    c.execute("PRAGMA user_version=%d" % (db.SCHEMA_VERSION + 1))
     c.close()
     with pytest.raises(SystemExit):
         db.init_db(p)

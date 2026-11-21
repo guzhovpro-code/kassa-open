@@ -204,7 +204,7 @@ def test_search_pick_for_income_is_remembered_only_for_income(page, server):
     btn(page, "direction", "Поступление").click()
     assert page.locator("#cur button.on").inner_text() == "KZT"
     page.fill("#amount", "10")
-    pick_method(page, "Redot")
+    pick_method(page, "Карта Monzo")
     press(page)
     page.wait_for_selector("#ok:not([hidden])")
     open_app(page, port)
@@ -332,7 +332,7 @@ def test_today_view_totals_and_list(page, server):
     port, path = server
     seed(path, direction="out", cents=150050, cur="TRY", usd=4500, category="продукты")
     seed(path, direction="out", cents=20000, cur="TRY", usd=600, category="кафе", note="кофе")
-    seed(path, direction="in", cents=10000, cur="USDT", usd=10000, category="доход", method="bybit")
+    seed(path, direction="in", cents=10000, cur="USDT", usd=10000, category="доход", method="okx")
     seed(path, direction="out", cents=99999, cur="TRY", status="cancelled")
     seed(path, direction="out", cents=77700, cur="TRY", day=(date.fromisoformat(TODAY) - timedelta(days=1)).isoformat())
     open_app(page, port)
@@ -346,7 +346,7 @@ def test_today_view_totals_and_list(page, server):
     assert fmt(5100) in page.locator("#today-usd").inner_text()                       # 4500 + 600 расходов
     assert "≈ USD" in page.locator("#today-usd").inner_text()
     rows = page.locator("#today-list li").all_inner_texts()
-    assert len(rows) == 3 and any("кофе" in r for r in rows) and any("Bybit" in r for r in rows)
+    assert len(rows) == 3 and any("кофе" in r for r in rows) and any("Биржа OKX" in r for r in rows)
     assert not any("удалена" in r for r in rows)
 
 
@@ -446,12 +446,12 @@ def test_recent_edit_category_and_method_keeps_amount(page, server):
     li.locator("button", has_text="Изменить").click()
     ed = li.locator(".editor")
     ed.locator("select").nth(1).select_option("возврат")
-    ed.locator("select").nth(2).select_option("sber")
+    ed.locator("select").nth(2).select_option("wise")
     ed.locator("button", has_text="Сохранить").click()
     expect(page.locator("#recent-msg")).to_contain_text("изменена")
     row = fetch_row(path, rid)
     assert (row["category"], row["method"], row["amount_cents"], row["currency"], row["usd_cents"]) == \
-        ("возврат", "sber", 12345, "USD", 12345)
+        ("возврат", "wise", 12345, "USD", 12345)
     c = db.connect(path, readonly=True)
     a = c.execute("SELECT action, actor_id, entity_id FROM audit WHERE action='update'").fetchall()
     assert [(x["actor_id"], x["entity_id"]) for x in a] == [(str(OWNER), str(rid))]

@@ -177,19 +177,19 @@ def test_income_requires_method_in_form(page, server):
     assert page.locator("#method-hint").is_visible() and page.locator("#ok").is_hidden()
     assert count(path) == before
     assert count(path, "via='webapp' AND direction='in' AND method IS NULL") == 0
-    assert page.locator("#method button").all_inner_texts() == ["Bybit", "Тинькофф", "Сбер", "Ещё ▾"]
+    assert page.locator("#method button").all_inner_texts() == ["Наличные", "Карта Monzo", "Карта Revolut", "Ещё ▾"]
     chip(page, "method", "Ещё ▾")
     titles = page.locator("#method-select option").all_inner_texts()
-    assert titles == ["Выберите способ", "Bybit", "Тинькофф", "Сбер", "Redot", "Kaspi", "Наличные", "Холодный кошелёк",
-                      "Другой…"]
-    page.select_option("#method-select", "redot")
+    assert titles == ["Выберите способ", "Наличные", "Карта Monzo", "Карта Revolut", "Карта N26", "Биржа OKX", "Карта Wise",
+                      "Кошелёк Ledger", "Другой…"]
+    page.select_option("#method-select", "monzo")
     assert main_button(page)["is_active"] is True and page.locator("#method-hint").is_hidden()
     chip(page, "cur", "USD")
     press(page)
     page.wait_for_selector("#ok:not([hidden])")
     c = db.connect(path, readonly=True)
     r = c.execute("SELECT * FROM transactions ORDER BY id DESC LIMIT 1").fetchone()
-    assert (r["direction"], r["method"], r["currency"], r["amount_cents"]) == ("in", "redot", "USD", 10000)
+    assert (r["direction"], r["method"], r["currency"], r["amount_cents"]) == ("in", "monzo", "USD", 10000)
 
 
 def test_other_method_creates_row(page, server):

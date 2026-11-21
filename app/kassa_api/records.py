@@ -174,6 +174,7 @@ def _ensure_method(conn: sqlite3.Connection, title: str, direction: str) -> str:
     conn.execute("INSERT OR IGNORE INTO methods(code, title, sort, active, scope) VALUES (?,?,?,1,?)",
                  (code, " ".join(title.split()), nxt, direction))
     conn.execute("UPDATE methods SET scope='both' WHERE code=? AND scope<>?", (code, direction))
+    conn.execute("UPDATE methods SET active=1 WHERE code=?", (code,))        # название снова названо: способ возвращается
     return code
 
 
@@ -473,7 +474,7 @@ METHOD_USAGE_DAYS = 90
 
 def method_order(conn: sqlite3.Connection, today: str) -> dict:
     """Порядок способов по направлению: чаще используемые за 90 дней (без записей, перекрытых закрытием),
-    затем остальные в порядке по умолчанию (db.DEFAULT_METHOD_ORDER), затем созданные вручную."""
+    затем остальные в порядке списка (поле sort: порядок, в котором их добавляли)."""
     since = (date_cls.fromisoformat(today) - timedelta(days=METHOD_USAGE_DAYS)).isoformat()
     active = {r["code"]: (r["scope"], r["sort"]) for r in conn.execute(
         "SELECT code, scope, sort FROM methods WHERE active=1")}
@@ -482,10 +483,8 @@ def method_order(conn: sqlite3.Connection, today: str) -> dict:
         usage = {r["method"]: r["n"] for r in conn.execute(
             "SELECT method, COUNT(*) n FROM transactions WHERE direction=? AND status='active' AND closed_by IS NULL "
             "AND method IS NOT NULL AND occurred_on>=? AND occurred_on<=? GROUP BY method", (direction, since, today))}
-        default = db.DEFAULT_METHOD_ORDER[direction]
         codes = [c for c, (scope, _) in active.items() if scope in (direction, "both")]
-        rank = {c: i for i, c in enumerate(default)}
-        codes.sort(key=lambda c: (-usage.get(c, 0), rank.get(c, len(default)), active[c][1], c))
+        codes.sort(key=lambda c: (-usage.get(c, 0), active[c][1], c))
         out[direction] = codes
     return out
 

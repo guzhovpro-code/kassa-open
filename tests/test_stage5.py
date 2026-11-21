@@ -258,7 +258,7 @@ def test_try_record_gets_usd_by_cached_rate(conn):
 
 
 def test_income_gets_usd_too(conn):
-    res = create(conn, RATES, direction="in", amount="800", currency="RUB", method="bybit", category="доход")
+    res = create(conn, RATES, direction="in", amount="800", currency="RUB", method="okx", category="доход")
     assert row(conn, res["id"])["usd_cents"] == 1000
 
 
